@@ -8,8 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.proyectofinal.components.navigation.BottomNavigationBar
+import com.example.proyectofinal.modelos.Usuario
+import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.ui.theme.GreenPrimary
 import com.example.proyectofinal.ui.theme.OrangeAlert
 import com.example.proyectofinal.ui.theme.RedEmergency
@@ -30,21 +32,30 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     navController: NavController
 ) {
-    val colors = MaterialTheme.colorScheme
+    // SOPORTE MODO OSCURO: Usamos el esquema de colores del tema actual
+    val colores = MaterialTheme.colorScheme
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val repositorio = remember { AutenticacionRepositorio() }
+    
+    var usuario by remember { mutableStateOf<Usuario?>(null) }
+
+    LaunchedEffect(Unit) {
+        usuario = repositorio.obtenerDatosUsuarioActual()
+    }
     
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = Color.White,
+                // SOPORTE MODO OSCURO: El fondo del menú lateral se adapta al tema
+                drawerContainerColor = colores.surface,
                 modifier = Modifier.width(300.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp)
+                        .height(200.dp)
                         .background(
                             Brush.verticalGradient(
                                 listOf(GreenPrimary, GreenPrimary.copy(alpha = 0.8f))
@@ -68,14 +79,15 @@ fun HomeScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(12.dp))
+                        // MOSTRAR DATOS: Nombre del usuario sin texto de carga
                         Text(
-                            "Mariana Rodríguez",
+                            text = if (usuario != null) "${usuario?.nombres} ${usuario?.apellidos}" else "Usuario",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp
                         )
                         Text(
-                            "mariana.rodriguez@email.com",
+                            text = usuario?.correo ?: "",
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 12.sp
                         )
@@ -95,7 +107,8 @@ fun HomeScreen(
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
                         unselectedIconColor = GreenPrimary,
-                        unselectedTextColor = Color.DarkGray
+                        // SOPORTE MODO OSCURO: El texto de los items se adapta
+                        unselectedTextColor = colores.onSurface
                     )
                 )
                 
@@ -110,7 +123,7 @@ fun HomeScreen(
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
                         unselectedIconColor = GreenPrimary,
-                        unselectedTextColor = Color.DarkGray
+                        unselectedTextColor = colores.onSurface
                     )
                 )
 
@@ -123,7 +136,10 @@ fun HomeScreen(
                     label = { Text("Cerrar Sesión") },
                     selected = false,
                     onClick = {
-                        navController.navigate("login") { popUpTo(0) }
+                        repositorio.cerrarSesion()
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
@@ -161,13 +177,19 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(Color.Gray)
+                                    .background(colores.secondaryContainer)
                             ) {
-                                Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.padding(4.dp))
+                                Icon(
+                                    Icons.Default.Person, 
+                                    null, 
+                                    tint = colores.onSecondaryContainer, 
+                                    modifier = Modifier.padding(4.dp)
+                                )
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                    // SOPORTE MODO OSCURO: Fondo de la barra adaptable
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colores.surface)
                 )
             },
             bottomBar = {
@@ -178,11 +200,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(colors.primary.copy(alpha = 0.1f), colors.primary.copy(alpha = 0.2f))
-                        )
-                    )
+                    .background(colores.background) // SOPORTE MODO OSCURO: Fondo general
             ) {
                 MapContent()
 
@@ -250,26 +268,27 @@ fun MapContent() {
 
 @Composable
 fun SecurityStatusCard() {
-    val colors = MaterialTheme.colorScheme
+    val colores = MaterialTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(0.65f),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        // SOPORTE MODO OSCURO: Superficie de tarjeta dinámica
+        colors = CardDefaults.cardColors(containerColor = colores.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Mapa de Seguridad", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Mapa de Seguridad", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colores.onSurface)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(colors.primary))
+                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(colores.primary))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Estado: Seguro", fontSize = 14.sp, color = Color.Gray)
+                Text("Estado: Seguro", fontSize = 14.sp, color = colores.onSurfaceVariant)
             }
             Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
                 progress = { 0.7f },
                 modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
-                color = colors.primary,
-                trackColor = colors.outlineVariant
+                color = colores.primary,
+                trackColor = colores.outlineVariant
             )
         }
     }
@@ -286,63 +305,47 @@ fun FilterChipsRow() {
 
 @Composable
 fun FilterChipTemplate(text: String, icon: ImageVector, isSelected: Boolean) {
-    val colors = MaterialTheme.colorScheme
+    val colores = MaterialTheme.colorScheme
     Surface(
-        color = if (isSelected) colors.primary else colors.surface,
+        // SOPORTE MODO OSCURO: Color de chip adaptable
+        color = if (isSelected) colores.primary else colores.surface,
         shape = RoundedCornerShape(20.dp),
-        shadowElevation = 2.dp
+        shadowElevation = 2.dp,
+        border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, colores.outlineVariant) else null
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, null, tint = if (isSelected) Color.White else Color.Red, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(text, color = if (isSelected) Color.White else Color.Black, fontSize = 12.sp)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (isSelected) Color.White else colores.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = text,
+                fontSize = 12.sp,
+                color = if (isSelected) Color.White else colores.onSurfaceVariant
+            )
         }
     }
 }
 
 @Composable
 fun MapActionButton(icon: ImageVector) {
+    val colores = MaterialTheme.colorScheme
     Surface(
-        shape = CircleShape,
-        color = Color.White,
-        shadowElevation = 4.dp
+        modifier = Modifier.size(44.dp),
+        shape = RoundedCornerShape(12.dp),
+        // SOPORTE MODO OSCURO: Botones flotantes del mapa adaptables
+        color = colores.surface,
+        shadowElevation = 4.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, colores.outlineVariant)
     ) {
-        IconButton(onClick = { }) {
-            Icon(icon, contentDescription = null, tint = Color.DarkGray)
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = colores.primary)
         }
-    }
-}
-
-@Composable
-fun BottomNavigationBar(navController: NavController) {
-    val colors = MaterialTheme.colorScheme
-    NavigationBar(containerColor = colors.surface) {
-        NavigationBarItem(
-            selected = true,
-            onClick = { },
-            icon = { Icon(Icons.Default.Map, "Map") },
-            label = { Text("Mapa") }
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = { navController.navigate("report") },
-            icon = { Icon(Icons.Default.AddCircle, "Report") },
-            label = { Text("Reportes") }
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = { },
-            icon = { Icon(Icons.Default.Notifications, "Alerts") },
-            label = { Text("Alertas") }
-        )
-        NavigationBarItem(
-            selected = false,
-            onClick = { navController.navigate("profile") },
-            icon = { Icon(Icons.Default.Person, "Profile") },
-            label = { Text("Perfil") }
-        )
     }
 }

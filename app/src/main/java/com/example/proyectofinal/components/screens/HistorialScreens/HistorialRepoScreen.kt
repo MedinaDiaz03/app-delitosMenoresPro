@@ -22,7 +22,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.proyectofinal.modelos.Reporte
+import com.example.proyectofinal.repositorios.AutenticacionRepositorio
+import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.ui.theme.GreenPrimary
+import java.text.SimpleDateFormat
+import java.util.*
 
 data class ReportHistoryItem(
     val title: String,
@@ -39,30 +44,19 @@ data class ReportHistoryItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorialRepoScreen(navController: NavController) {
-    val reports = listOf(
-        ReportHistoryItem(
-            "Vandalismo", "24 oct, 2023", "14:30",
-            "Grafiti en las paredes de la entrada principal del parque comunitario. Se...",
-            "Confirmado", Color(0xFF0B6E4F), Icons.Default.Edit,
-            hasImage = true
-        ),
-        ReportHistoryItem(
-            "Robo", "22 oct, 2023", "21:15",
-            "Intento de robo de bicicleta cerca de los estantes del metro. El perpetrador huyó...",
-            "En Revisión", Color(0xFFF2994A), Icons.Default.Person,
-        ),
-        ReportHistoryItem(
-            "Accidente", "19 oct, 2023", "08:45",
-            "Colisión menor entre dos vehículos en la intersección de 5ta y Main. Sin heridos.",
-            "Rechazado", Color(0xFFEB5757), Icons.Default.DirectionsCar,
-            alertMessage = "Reporte duplicado ya atendido por las autoridades."
-        ),
-        ReportHistoryItem(
-            "Problema de Servicios", "15 oct, 2023", "19:00",
-            "Toda una cuadra de luces de la calle parpadeando y apagándose...",
-            "Confirmado", Color(0xFF0B6E4F), Icons.Default.Lightbulb
-        )
-    )
+    val reportRepositorio = remember { ReporteRepositorio() }
+    val authRepositorio = remember { AutenticacionRepositorio() }
+    var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
+    var cargando by remember { mutableStateOf(true) }
+    val colores = MaterialTheme.colorScheme
+
+    LaunchedEffect(Unit) {
+        val usuario = authRepositorio.obtenerDatosUsuarioActual()
+        if (usuario != null) {
+            reportes = reportRepositorio.obtenerReportesPorUsuario(usuario.id)
+        }
+        cargando = false
+    }
 
     Scaffold(
         topBar = {
@@ -167,12 +161,18 @@ fun HistorialRepoScreen(navController: NavController) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val filteredReports = if (selectedFilter == "Todos") {
-                    reports
+                    reportes
                 } else {
-                    reports.filter { it.status == selectedFilter }
+                    // Por ahora los reportes reales no tienen estado dinámico en el modelo simple, 
+                    // se podría filtrar por categoría o añadir estado al modelo Reporte.
+                    reportes.filter { it.categoria == selectedFilter }
                 }
 
-                if (filteredReports.isEmpty()) {
+                if (cargando) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = GreenPrimary)
+                    }
+                } else if (filteredReports.isEmpty()) {
                     EmptyHistoryView(navController)
                 } else {
                     LazyColumn(
@@ -181,11 +181,64 @@ fun HistorialRepoScreen(navController: NavController) {
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         items(filteredReports) { report ->
-                            ReportCard(report)
+                            RealReportCard(report)
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun RealReportCard(report: Reporte) {
+    val sdfFecha = SimpleDateFormat("dd MMM, yyyy", Locale.getDefault())
+    val sdfHora = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val fechaStr = sdfFecha.format(report.fecha.toDate())
+    val horaStr = sdfHora.format(report.fecha.toDate())
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(GreenPrimary.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Report, null, tint = GreenPrimary, modifier = Modifier.size(20.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(report.categoria, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("$fechaStr • $horaStr", fontSize = 12.sp, color = Color.Gray)
+                }
+                Surface(
+                    color = GreenPrimary.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        "Enviado",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GreenPrimary
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Text(report.descripcion.ifEmpty { "Sin descripción" }, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Por: ${report.usuarioNombre}", fontSize = 11.sp, color = Color.Gray)
         }
     }
 }

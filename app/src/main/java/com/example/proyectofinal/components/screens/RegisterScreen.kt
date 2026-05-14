@@ -1,26 +1,31 @@
 package com.example.proyectofinal.components.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.proyectofinal.components.auth.*
+import com.example.proyectofinal.modelos.Usuario
+import com.example.proyectofinal.repositorios.AutenticacionRepositorio
+import kotlinx.coroutines.launch
 
 @Composable
 fun RegisterScreen(navController: NavController) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repositorio = remember { AutenticacionRepositorio() }
 
     var nombres by remember { mutableStateOf("") }
     var apellidos by remember { mutableStateOf("") }
@@ -29,6 +34,12 @@ fun RegisterScreen(navController: NavController) {
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var aceptoTerminos by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    // Función para validar que solo sean letras (permite espacios)
+    fun soloLetras(texto: String): Boolean {
+        return texto.all { it.isLetter() || it.isWhitespace() }
+    }
 
     Column(
         modifier = Modifier
@@ -51,15 +62,14 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Nombres y Apellidos
+            // Nombres y Apellidos (Solo letras)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Aca llamamos al microcomponente PrimaryInputField (caja para escribir)
                 PrimaryInputField(
                     value = nombres,
-                    onValueChange = { nombres = it },
+                    onValueChange = { if (soloLetras(it)) nombres = it },
                     label = "Nombres",
                     placeholder = "Ej. Juan",
                     leadingIcon = Icons.Default.Person,
@@ -68,7 +78,7 @@ fun RegisterScreen(navController: NavController) {
 
                 PrimaryInputField(
                     value = apellidos,
-                    onValueChange = { apellidos = it },
+                    onValueChange = { if (soloLetras(it)) apellidos = it },
                     label = "Apellidos",
                     placeholder = "Ej. Pérez",
                     leadingIcon = Icons.Default.Person,
@@ -78,9 +88,10 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // DNI (Solo números, max 8)
             PrimaryInputField(
                 value = dni,
-                onValueChange = { dni = it },
+                onValueChange = { if (it.length <= 8 && it.all { char -> char.isDigit() }) dni = it },
                 label = "DNI",
                 placeholder = "Número de documento",
                 leadingIcon = Icons.Default.Badge
@@ -88,11 +99,12 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Correo (@gmail.com obligatorio)
             PrimaryInputField(
                 value = correo,
                 onValueChange = { correo = it },
                 label = "Correo electrónico",
-                placeholder = "nombre@ejemplo.com",
+                placeholder = "nombre@gmail.com",
                 leadingIcon = Icons.Default.Email
             )
 
@@ -127,10 +139,61 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            PrimaryButton(
-                text = "Crear cuenta",
-                onClick = { navController.navigate("home") }
-            )
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                PrimaryButton(
+                    text = "Crear cuenta",
+                    onClick = {
+                        // REQUISITO: Todos los campos llenos
+                        if (nombres.isBlank() || apellidos.isBlank() || dni.isBlank() || 
+                            correo.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
+                            Toast.makeText(context, "Todos los campos tienen que ser llenados", Toast.LENGTH_SHORT).show()
+                            return@PrimaryButton
+                        }
+
+                        // REQUISITO: Correo @gmail.com
+                        if (!correo.lowercase().endsWith("@gmail.com")) {
+                            Toast.makeText(context, "Correo no aceptable", Toast.LENGTH_SHORT).show()
+                            return@PrimaryButton
+                        }
+
+                        if (password != confirmPassword) {
+                            Toast.makeText(context, "Las contraseñas no coinciden", Toast.LENGTH_SHORT).show()
+                            return@PrimaryButton
+                        }
+
+                        if (!aceptoTerminos) {
+                            Toast.makeText(context, "Debe aceptar los términos", Toast.LENGTH_SHORT).show()
+                            return@PrimaryButton
+                        }
+
+                        isLoading = true
+                        val nuevoUsuario = Usuario(
+                            nombres = nombres,
+                            apellidos = apellidos,
+                            dni = dni,
+                            correo = correo
+                        )
+
+                        scope.launch {
+                            val resultado = repositorio.registrarUsuario(nuevoUsuario, password)
+                            isLoading = false
+                            if (resultado.isSuccess) {
+                                Toast.makeText(context, "Registro exitoso", Toast.LENGTH_SHORT).show()
+                                navController.navigate("home") {
+                                    popUpTo("register") { inclusive = true }
+                                    popUpTo("login") { inclusive = true }
+                                }
+                            } else {
+                                Toast.makeText(context, "Error: ${resultado.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

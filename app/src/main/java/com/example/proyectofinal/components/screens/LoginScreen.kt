@@ -1,5 +1,6 @@
 package com.example.proyectofinal.components.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -9,34 +10,42 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.proyectofinal.components.auth.*
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import com.example.proyectofinal.components.auth.SSOAccessItem
-
-import com.example.proyectofinal.components.auth.AuthFooter
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-
-
-
-
+import com.example.proyectofinal.repositorios.AutenticacionRepositorio
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(navController: NavController) {
+    val contexto = LocalContext.current
+    val alcanceCorrutina = rememberCoroutineScope()
+    val repositorio = remember { AutenticacionRepositorio() }
 
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var correo by remember { mutableStateOf("") }
+    var contrasena by remember { mutableStateOf("") }
+    var estaCargando by remember { mutableStateOf(false) }
+
+    // Verificar si el usuario ya inició sesión para saltar el login
+    LaunchedEffect(Unit) {
+        if (repositorio.obtenerUsuarioActual() != null) {
+            navController.navigate("home") {
+                popUpTo("login") { inclusive = true }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())// Para desplazar la pantalla
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
 
@@ -50,18 +59,18 @@ fun LoginScreen(navController: NavController) {
         AuthCardContainer(modifier = Modifier.offset(y = (-28).dp)) {
 
             PrimaryInputField(
-                value = email,
-                onValueChange = { email = it },
-                label = "Correo o DNI",
-                placeholder = "correo@ejemplo.com",
+                value = correo,
+                onValueChange = { correo = it },
+                label = "Correo electrónico",
+                placeholder = "usuario@gmail.com",
                 leadingIcon = Icons.Default.Email
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             PrimaryInputField(
-                value = password,
-                onValueChange = { password = it },
+                value = contrasena,
+                onValueChange = { contrasena = it },
                 label = "Contraseña",
                 placeholder = "********",
                 leadingIcon = Icons.Default.Lock,
@@ -70,23 +79,72 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-
             TextAction(
                 text = "¿Olvidaste tu contraseña?",
-                onClick = { /* navegar luego */ }
+                onClick = {
+                    if (correo.isBlank()) {
+                        Toast.makeText(contexto, "Ingresa tu correo para recuperar", Toast.LENGTH_SHORT).show()
+                    } else if (!correo.lowercase().endsWith("@gmail.com")) {
+                        Toast.makeText(contexto, "Ingresa un correo @gmail.com válido", Toast.LENGTH_SHORT).show()
+                    } else {
+                        alcanceCorrutina.launch {
+                            val resultado = repositorio.recuperarContrasena(correo)
+                            if (resultado.isSuccess) {
+                                Toast.makeText(contexto, "Correo de recuperación enviado", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(contexto, "Error al enviar correo", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            PrimaryButton(
-                text = "Iniciar sesión",
-                onClick = { navController.navigate("home") }
-            )
+            if (estaCargando) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                PrimaryButton(
+                    text = "Iniciar sesión",
+                    onClick = {
+                        // REQUISITOS SOLICITADOS:
+                        // 1. No campos nulos/vacíos
+                        if (correo.isBlank() || contrasena.isBlank()) {
+                            Toast.makeText(contexto, "Todos los campos tienen que ser llenados", Toast.LENGTH_SHORT).show()
+                            return@PrimaryButton
+                        }
+
+                        // 2. Correo debe terminar en @gmail.com
+                        if (!correo.lowercase().endsWith("@gmail.com")) {
+                            Toast.makeText(contexto, "correo no aceptable", Toast.LENGTH_SHORT).show()
+                            return@PrimaryButton
+                        }
+
+                        estaCargando = true
+                        alcanceCorrutina.launch {
+                            val resultado = repositorio.iniciarSesion(correo, contrasena)
+                            estaCargando = false
+                            if (resultado.isSuccess) {
+                                navController.navigate("home") {
+                                    popUpTo("login") { inclusive = true }
+                                }
+                            } else {
+                                Toast.makeText(
+                                    contexto, 
+                                    "Error al ingresar: Verifique sus datos o regístrese",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
             DividerWithText(text = "O accede con")
-
 
             Spacer(modifier = Modifier.height(16.dp))
 

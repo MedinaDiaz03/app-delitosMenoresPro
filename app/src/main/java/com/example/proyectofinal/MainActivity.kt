@@ -8,6 +8,7 @@ import androidx.compose.material3.Surface
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.proyectofinal.components.screens.AlertsScreen
 import com.example.proyectofinal.components.screens.HistorialScreens.HistorialRepoScreen
 import com.example.proyectofinal.components.screens.HomeScreen
 import com.example.proyectofinal.components.screens.LoginScreen
@@ -40,6 +41,9 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(route = "report") {
                             ReportScreen(navController)
+                        }
+                        composable(route = "alerts") {
+                            AlertsScreen(navController)
                         }
                         composable(route = "profile") {
                             ProfileScreen(navController)

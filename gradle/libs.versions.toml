@@ -10,6 +10,8 @@ kotlin = "2.2.10"
 composeBom = "2026.02.01"
 navigationCompose = "2.8.8"
 runtime = "1.11.1"
+playServicesLocation = "21.3.0"
+accompanist = "0.36.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -29,6 +31,8 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-compose-material-icons-extended = {module = "androidx.compose.material:material-icons-extended"}
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime", version.ref = "runtime" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
+accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
