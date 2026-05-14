@@ -59,6 +59,7 @@ fun HistorialRepoScreen(navController: NavController) {
     }
 
     Scaffold(
+        containerColor = colores.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -89,20 +90,32 @@ fun HistorialRepoScreen(navController: NavController) {
                 },
                 actions = {
                     IconButton(onClick = { }) {
-                        Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications")
+                        Icon(
+                            Icons.Default.NotificationsNone, 
+                            contentDescription = "Notifications",
+                            tint = colores.onSurface
+                        )
                     }
                     IconButton(onClick = { navController.navigate("profile") }) {
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color.Gray)
+                                .background(colores.secondaryContainer)
                         ) {
-                            Icon(Icons.Default.Person, null, tint = Color.White, modifier = Modifier.padding(4.dp))
+                            Icon(
+                                Icons.Default.Person, 
+                                null, 
+                                tint = colores.onSecondaryContainer, 
+                                modifier = Modifier.padding(4.dp)
+                            )
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = colores.background,
+                    titleContentColor = colores.onBackground
+                )
             )
         },
         bottomBar = {
@@ -113,7 +126,7 @@ fun HistorialRepoScreen(navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Color(0xFFF8F9FA))
+                .background(colores.background)
         ) {
             // Títulos (Con padding horizontal)
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -126,7 +139,7 @@ fun HistorialRepoScreen(navController: NavController) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "Rastrea y gestiona tus contribuciones a la comunidad",
-                    color = Color.Gray,
+                    color = colores.onSurfaceVariant,
                     fontSize = 14.sp
                 )
             }
@@ -217,7 +230,7 @@ fun RealReportCard(report: Reporte) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(report.categoria, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("$fechaStr • $horaStr", fontSize = 12.sp, color = Color.Gray)
+                    Text("$fechaStr • $horaStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Surface(
                     color = GreenPrimary.copy(alpha = 0.1f),
@@ -238,7 +251,7 @@ fun RealReportCard(report: Reporte) {
             Text(report.descripcion.ifEmpty { "Sin descripción" }, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
             
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Por: ${report.usuarioNombre}", fontSize = 11.sp, color = Color.Gray)
+            Text("Por: ${report.usuarioNombre}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -263,14 +276,14 @@ fun EmptyHistoryView(navController: NavController) {
                 modifier = Modifier
                     .size(160.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFE6F4F1).copy(alpha = 0.5f))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f))
             )
             
             // Main Icon Container
             Card(
                 modifier = Modifier.size(120.dp),
                 shape = RoundedCornerShape(32.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
@@ -309,7 +322,7 @@ fun EmptyHistoryView(navController: NavController) {
             fontWeight = FontWeight.ExtraBold,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             lineHeight = 34.sp,
-            color = Color(0xFF1A1C1E)
+            color = MaterialTheme.colorScheme.onBackground
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -317,7 +330,7 @@ fun EmptyHistoryView(navController: NavController) {
         Text(
             text = "Tu historial está vacío. Sé el primero en alertar a tus vecinos y contribuye activamente a la seguridad y bienestar de tu comunidad.",
             fontSize = 15.sp,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp),
             lineHeight = 22.sp
@@ -358,7 +371,7 @@ fun ReportCard(report: ReportHistoryItem) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -429,7 +442,10 @@ fun ReportCard(report: ReportHistoryItem) {
 
 @Composable
 fun BottomNavigationBarHistory(navController: NavController) {
-    NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 8.dp
+    ) {
         NavigationBarItem(
             selected = false,
             onClick = { navController.navigate("home") },
