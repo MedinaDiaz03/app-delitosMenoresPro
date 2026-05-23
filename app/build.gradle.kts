@@ -71,4 +71,6 @@ dependencies {
 
     implementation(libs.maps.compose)
     implementation(libs.play.services.maps)
+
+    implementation("com.cloudinary:cloudinary-android:2.8.0")
 }

@@ -1,7 +1,9 @@
 package com.example.proyectofinal.components.screens.HistorialScreens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -18,10 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.rememberAsyncImagePainter
 import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
@@ -91,7 +95,7 @@ fun HistorialRepoScreen(navController: NavController) {
                 actions = {
                     IconButton(onClick = { }) {
                         Icon(
-                            Icons.Default.NotificationsNone, 
+                            Icons.Default.NotificationsNone,
                             contentDescription = "Notifications",
                             tint = colores.onSurface
                         )
@@ -104,9 +108,9 @@ fun HistorialRepoScreen(navController: NavController) {
                                 .background(colores.secondaryContainer)
                         ) {
                             Icon(
-                                Icons.Default.Person, 
-                                null, 
-                                tint = colores.onSecondaryContainer, 
+                                Icons.Default.Person,
+                                null,
+                                tint = colores.onSecondaryContainer,
                                 modifier = Modifier.padding(4.dp)
                             )
                         }
@@ -143,13 +147,13 @@ fun HistorialRepoScreen(navController: NavController) {
                     fontSize = 14.sp
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             // Filtros (Sin padding en el contenedor, pero con contentPadding interno)
             val filters = listOf("Todos", "Confirmado", "En Revisión", "Rechazado")
             var selectedFilter by remember { mutableStateOf("Todos") }
-            
+
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 16.dp), // Alineación inicial
@@ -176,7 +180,7 @@ fun HistorialRepoScreen(navController: NavController) {
                 val filteredReports = if (selectedFilter == "Todos") {
                     reportes
                 } else {
-                    // Por ahora los reportes reales no tienen estado dinámico en el modelo simple, 
+                    // Por ahora los reportes reales no tienen estado dinámico en el modelo simple,
                     // se podría filtrar por categoría o añadir estado al modelo Reporte.
                     reportes.filter { it.categoria == selectedFilter }
                 }
@@ -194,7 +198,7 @@ fun HistorialRepoScreen(navController: NavController) {
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         items(filteredReports) { report ->
-                            RealReportCard(report)
+                            RealReportCard(report, navController)
                         }
                     }
                 }
@@ -204,54 +208,94 @@ fun HistorialRepoScreen(navController: NavController) {
 }
 
 @Composable
-fun RealReportCard(report: Reporte) {
-    val sdfFecha = SimpleDateFormat("dd MMM, yyyy", Locale.getDefault())
-    val sdfHora = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val fechaStr = sdfFecha.format(report.fecha.toDate())
-    val horaStr = sdfHora.format(report.fecha.toDate())
+fun RealReportCard(report: Reporte, navController: NavController) {
+    // Controlamos el formateo de la fecha con un bloque seguro
+    val fechaYHoraStr = try {
+        if (report.fecha != null) {
+            val sdf = SimpleDateFormat("dd MMM, yyyy • HH:mm", Locale.getDefault())
+            sdf.format(report.fecha.toDate())
+        } else {
+            "Fecha no disponible"
+        }
+    } catch (e: Exception) {
+        "Fecha no disponible"
+    }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                // Guarda el objeto de forma segura antes de navegar
+                navController.currentBackStackEntry?.savedStateHandle?.set("reporte_objeto", report)
+                navController.navigate("report_detail")
+            },
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Miniatura multimedia segura
+            if (!report.fotoUrl.isNullOrEmpty() && report.fotoUrl.contains("http")) {
+                Image(
+                    painter = rememberAsyncImagePainter(report.fotoUrl),
+                    contentDescription = "Evidencia",
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(GreenPrimary.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Report, null, tint = GreenPrimary, modifier = Modifier.size(20.dp))
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(report.categoria, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("$fechaStr • $horaStr", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Surface(
-                    color = GreenPrimary.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        "Enviado",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = GreenPrimary
-                    )
+                    Icon(Icons.Default.Report, null, tint = GreenPrimary, modifier = Modifier.size(22.dp))
                 }
             }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(report.descripcion.ifEmpty { "Sin descripción" }, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Por: ${report.usuarioNombre}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(report.categoria ?: "Incidente", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Surface(
+                        color = GreenPrimary.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            "Enviado",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GreenPrimary
+                        )
+                    }
+                }
+
+                Text(
+                    text = report.descripcion?.ifEmpty { "Sin descripción" } ?: "Sin descripción",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$fechaYHoraStr  |  Por: ${report.usuarioNombre ?: "Vecino"}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
         }
     }
 }
@@ -278,7 +322,7 @@ fun EmptyHistoryView(navController: NavController) {
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f))
             )
-            
+
             // Main Icon Container
             Card(
                 modifier = Modifier.size(120.dp),
@@ -403,11 +447,11 @@ fun ReportCard(report: ReportHistoryItem) {
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             Text(report.description, fontSize = 14.sp, color = Color.DarkGray)
-            
+
             if (report.hasImage) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Box(
@@ -421,7 +465,7 @@ fun ReportCard(report: ReportHistoryItem) {
                     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF2D6A4F).copy(alpha = 0.5f)))
                 }
             }
-            
+
             if (report.alertMessage != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Surface(

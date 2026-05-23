@@ -1,5 +1,6 @@
 package com.example.proyectofinal.components.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -109,7 +110,6 @@ fun HomeScreen(navController: NavController) {
         }
     }
 
-    // Función reutilizable para volver a mi ubicación
     suspend fun volverAMiUbicacion() {
         if (locationPermission.status.isGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
@@ -120,7 +120,13 @@ fun HomeScreen(navController: NavController) {
                         15f
                     )
                 )
+            } else {
+                // Si el GPS tarda en responder, evitamos que no haga nada:
+                Toast.makeText(context, "Buscando señal GPS... Reintentando", Toast.LENGTH_SHORT).show()
+                camaraState.animate(CameraUpdateFactory.newLatLngZoom(CAJAMARCA, 13f))
             }
+        } else {
+            Toast.makeText(context, "Permiso de ubicación denegado", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -359,23 +365,20 @@ fun MapaConReportes(
     locationGranted: Boolean,
     mapaOscuro: Boolean
 ) {
-    // Estilo oscuro para el mapa — JSON estándar de Google Maps
-    val estiloOscuro = """
-        [{"elementType":"geometry","stylers":[{"color":"#212121"}]},
-         {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
-         {"elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},
-         {"elementType":"labels.text.stroke","stylers":[{"color":"#212121"}]},
-         {"featureType":"road","elementType":"geometry","stylers":[{"color":"#484848"}]},
-         {"featureType":"water","elementType":"geometry","stylers":[{"color":"#000000"}]}]
-    """.trimIndent()
+    val context = LocalContext.current // Necesitamos el contexto para leer el archivo
+
+    val propiedadesMapa = MapProperties(
+        isMyLocationEnabled = locationGranted,
+        mapStyleOptions = if (mapaOscuro) {
+            // Carga el archivo .json de forma segura
+            MapStyleOptions.loadRawResourceStyle(context, com.example.proyectofinal.R.raw.map_dark_style)
+        } else null
+    )
 
     GoogleMap(
         modifier = Modifier.fillMaxSize(),
         cameraPositionState = camaraState,
-        properties = MapProperties(
-            isMyLocationEnabled = locationGranted,
-            mapStyleOptions = if (mapaOscuro) MapStyleOptions(estiloOscuro) else null
-        ),
+        properties = propiedadesMapa,
         uiSettings = MapUiSettings(myLocationButtonEnabled = false)
     ) {
         reportes.forEach { reporte ->

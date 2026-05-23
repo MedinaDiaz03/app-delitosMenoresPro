@@ -1,7 +1,9 @@
 package com.example.proyectofinal.components.screens
 
 import android.content.Context
+import android.location.LocationManager
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -43,12 +45,12 @@ import com.example.proyectofinal.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 
 data class CategoryItem(val name: String, val icon: ImageVector, val color: Color)
 
-// Crea un archivo temporal en caché para guardar la foto de la cámara
 fun crearArchivoFotoTemporal(context: Context): Uri {
     val carpeta = File(context.cacheDir, "camera_photos").apply { mkdirs() }
     val archivo = File(carpeta, "foto_${System.currentTimeMillis()}.jpg")
@@ -78,27 +80,37 @@ fun ReportScreen(navController: NavController) {
     var enviando by remember { mutableStateOf(false) }
     var imagenUri by remember { mutableStateOf<Uri?>(null) }
 
-    // Uri temporal donde la cámara va a guardar la foto
     var uriParaCamara by remember {
         mutableStateOf(crearArchivoFotoTemporal(context))
     }
 
-    // TakePicture devuelve true si la foto fue tomada con éxito
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { fotoTomada ->
         if (fotoTomada) {
             imagenUri = uriParaCamara
-            // Preparar un nuevo Uri para la próxima vez
             uriParaCamara = crearArchivoFotoTemporal(context)
         }
     }
 
+    // ESTADO REAL DEL GPS SENSOR DEL EQUIPO
+    var gpsActivo by remember { mutableStateOf(false) }
+
+    // Monitoreo constante en segundo plano para saber si el GPS físico está encendido
     LaunchedEffect(Unit) {
         if (!locationPermissionState.status.isGranted) {
             locationPermissionState.launchPermissionRequest()
         }
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        while(true) {
+            gpsActivo = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            delay(1000) // Verifica el estado real cada segundo
+        }
     }
+
+    // El candado definitivo: Requiere permiso otorgado Y el interruptor de ubicación del celular encendido
+    val ubicacionCompletamenteValida = locationPermissionState.status.isGranted && gpsActivo
 
     Scaffold(
         topBar = {
@@ -184,15 +196,65 @@ fun ReportScreen(navController: NavController) {
                 enabled = !enviando
             )
 
+            // UNICA ALERTA CRITICA VISUAL SI ALGO FALLA CON LA UBICACIÓN
+            if (!ubicacionCompletamenteValida) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFFEBAA))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFF856404))
+                            Text(
+                                text = "Ubicación obligatoria",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF856404),
+                                fontSize = 15.sp
+                            )
+                        }
+
+                        // Mensaje dinámico dependiendo de qué es exactamente lo que falta activar
+                        val mensajeAlerta = if (!locationPermissionState.status.isGranted) {
+                            "No puedes realizar reportes sin aceptar los permisos de ubicación de la aplicación."
+                        } else {
+                            "El GPS de tu celular está apagado. Por favor, actívalo en la barra de notificaciones para poder ubicar tu reporte."
+                        }
+
+                        Text(text = mensajeAlerta, color = Color(0xFF856404), fontSize = 13.sp)
+
+                        // Si falta el permiso, mostramos explícitamente el botón para concederlo
+                        if (!locationPermissionState.status.isGranted) {
+                            Button(
+                                onClick = { locationPermissionState.launchPermissionRequest() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF856404)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Conceder permiso", fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // BOTÓN DE ENVIAR REPORTES TOTALMENTE CONDICIONADO
             Button(
                 onClick = {
-                    if (categoriaSeleccionada != null) {
+                    if (categoriaSeleccionada != null && ubicacionCompletamenteValida) {
                         enviando = true
                         scope.launch {
                             val usuario = authRepositorio.obtenerDatosUsuarioActual()
-                            val ubicacion = if (locationPermissionState.status.isGranted) {
-                                locationRepositorio.obtenerUbicacionActual()
-                            } else null
+                            val ubicacion = locationRepositorio.obtenerUbicacionActual()
 
                             var fotoUrl: String? = null
                             if (imagenUri != null) {
@@ -209,19 +271,24 @@ fun ReportScreen(navController: NavController) {
                                 descripcion = descripcion,
                                 latitud = ubicacion?.latitude ?: 0.0,
                                 longitud = ubicacion?.longitude ?: 0.0,
-                                fotoUrl = fotoUrl
+                                fotoUrl = fotoUrl,
+                                fecha = com.google.firebase.Timestamp.now()
                             )
                             val resultado = reportRepositorio.enviarReporte(nuevoReporte)
                             enviando = false
                             if (resultado.isSuccess) {
+                                Toast.makeText(context, "Reporte enviado con éxito", Toast.LENGTH_SHORT).show()
                                 navController.popBackStack()
+                            } else {
+                                Toast.makeText(context, "Error al enviar el reporte", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(16.dp),
-                enabled = categoriaSeleccionada != null && !enviando
+                // SE BLOQUEA EN GRIS AUTOMÁTICAMENTE SI NO SE CUMPLE LA REGLA DE UBICACIÓN COMPLETA
+                enabled = categoriaSeleccionada != null && !enviando && ubicacionCompletamenteValida
             ) {
                 if (enviando) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
