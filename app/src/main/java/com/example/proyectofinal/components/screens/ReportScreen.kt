@@ -1,5 +1,6 @@
 package com.example.proyectofinal.components.screens
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.example.proyectofinal.components.navigation.BottomNavigationBar
@@ -42,8 +44,16 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import kotlinx.coroutines.launch
+import java.io.File
 
 data class CategoryItem(val name: String, val icon: ImageVector, val color: Color)
+
+// Crea un archivo temporal en caché para guardar la foto de la cámara
+fun crearArchivoFotoTemporal(context: Context): Uri {
+    val carpeta = File(context.cacheDir, "camera_photos").apply { mkdirs() }
+    val archivo = File(carpeta, "foto_${System.currentTimeMillis()}.jpg")
+    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", archivo)
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -59,16 +69,29 @@ fun ReportScreen(navController: NavController) {
     val locationPermissionState = rememberPermissionState(
         android.Manifest.permission.ACCESS_FINE_LOCATION
     )
-    
+    val cameraPermissionState = rememberPermissionState(
+        android.Manifest.permission.CAMERA
+    )
+
     var descripcion by remember { mutableStateOf("") }
     var categoriaSeleccionada by remember { mutableStateOf<String?>(null) }
     var enviando by remember { mutableStateOf(false) }
     var imagenUri by remember { mutableStateOf<Uri?>(null) }
 
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        imagenUri = uri
+    // Uri temporal donde la cámara va a guardar la foto
+    var uriParaCamara by remember {
+        mutableStateOf(crearArchivoFotoTemporal(context))
+    }
+
+    // TakePicture devuelve true si la foto fue tomada con éxito
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { fotoTomada ->
+        if (fotoTomada) {
+            imagenUri = uriParaCamara
+            // Preparar un nuevo Uri para la próxima vez
+            uriParaCamara = crearArchivoFotoTemporal(context)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -109,12 +132,18 @@ fun ReportScreen(navController: NavController) {
         ) {
             SeccionCapturaFoto(
                 imagenUri = imagenUri,
-                onClick = { galleryLauncher.launch("image/*") }
+                onClick = {
+                    if (cameraPermissionState.status.isGranted) {
+                        cameraLauncher.launch(uriParaCamara)
+                    } else {
+                        cameraPermissionState.launchPermissionRequest()
+                    }
+                }
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Categoría del incidente", fontWeight = FontWeight.Bold)
-                
+
                 val categorias = listOf(
                     CategoryItem("Robo", Icons.Default.GppBad, CategoryRobo),
                     CategoryItem("Vandalismo", Icons.Default.Edit, CategoryVandalismo),
@@ -135,10 +164,10 @@ fun ReportScreen(navController: NavController) {
                             )
                             if (i + 1 < categorias.size) {
                                 TarjetaCategoria(
-                                    item = categorias[i+1],
-                                    estaSeleccionado = categoriaSeleccionada == categorias[i+1].name,
+                                    item = categorias[i + 1],
+                                    estaSeleccionado = categoriaSeleccionada == categorias[i + 1].name,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { categoriaSeleccionada = categorias[i+1].name }
+                                    onClick = { categoriaSeleccionada = categorias[i + 1].name }
                                 )
                             }
                         }
@@ -202,7 +231,7 @@ fun ReportScreen(navController: NavController) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
         }
     }

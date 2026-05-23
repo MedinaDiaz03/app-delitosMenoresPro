@@ -15,40 +15,120 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.proyectofinal.components.navigation.BottomNavigationBar
+import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
+import com.example.proyectofinal.repositorios.LocationRepositorio
+import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.ui.theme.GreenPrimary
 import com.example.proyectofinal.ui.theme.OrangeAlert
 import com.example.proyectofinal.ui.theme.RedEmergency
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+private val CAJAMARCA = LatLng(-7.1638, -78.5001)
+
+private fun colorPorCategoria(categoria: String): Float {
+    return when (categoria) {
+        "Robo" -> BitmapDescriptorFactory.HUE_RED
+        "Vandalismo" -> BitmapDescriptorFactory.HUE_ORANGE
+        "Pelea" -> BitmapDescriptorFactory.HUE_YELLOW
+        "Drogas" -> BitmapDescriptorFactory.HUE_VIOLET
+        "Acoso" -> BitmapDescriptorFactory.HUE_ROSE
+        "Infraestructura" -> BitmapDescriptorFactory.HUE_AZURE
+        else -> BitmapDescriptorFactory.HUE_RED
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
-fun HomeScreen(
-    navController: NavController
-) {
-    // SOPORTE MODO OSCURO: Usamos el esquema de colores del tema actual
+fun HomeScreen(navController: NavController) {
+    val context = LocalContext.current
     val colores = MaterialTheme.colorScheme
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val repositorio = remember { AutenticacionRepositorio() }
-    
-    var usuario by remember { mutableStateOf<Usuario?>(null) }
+    val authRepositorio = remember { AutenticacionRepositorio() }
+    val reporteRepositorio = remember { ReporteRepositorio() }
+    val locationRepositorio = remember { LocationRepositorio(context) }
 
-    LaunchedEffect(Unit) {
-        usuario = repositorio.obtenerDatosUsuarioActual()
+    var usuario by remember { mutableStateOf<Usuario?>(null) }
+    var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
+    var mapaOscuro by remember { mutableStateOf(false) }
+
+    // Permiso de ubicación — lo pedimos aquí en el Home
+    val locationPermission = rememberPermissionState(
+        android.Manifest.permission.ACCESS_FINE_LOCATION
+    )
+
+    val camaraState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(CAJAMARCA, 13f)
     }
-    
+
+    // Pedir permiso al entrar a la pantalla
+    LaunchedEffect(Unit) {
+        usuario = authRepositorio.obtenerDatosUsuarioActual()
+        reportes = reporteRepositorio.obtenerReportes()
+
+        if (!locationPermission.status.isGranted) {
+            locationPermission.launchPermissionRequest()
+        }
+    }
+
+    // Mover cámara cuando se otorga el permiso
+    LaunchedEffect(locationPermission.status.isGranted) {
+        if (locationPermission.status.isGranted) {
+            val ubicacion = locationRepositorio.obtenerUbicacionActual()
+            if (ubicacion != null) {
+                camaraState.animate(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng(ubicacion.latitude, ubicacion.longitude),
+                        15f
+                    )
+                )
+            }
+        }
+    }
+
+    // Función reutilizable para volver a mi ubicación
+    suspend fun volverAMiUbicacion() {
+        if (locationPermission.status.isGranted) {
+            val ubicacion = locationRepositorio.obtenerUbicacionActual()
+            if (ubicacion != null) {
+                camaraState.animate(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng(ubicacion.latitude, ubicacion.longitude),
+                        15f
+                    )
+                )
+            }
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = false,
         drawerContent = {
             ModalDrawerSheet(
-                // SOPORTE MODO OSCURO: El fondo del menú lateral se adapta al tema
                 drawerContainerColor = colores.surface,
                 modifier = Modifier.width(300.dp)
             ) {
@@ -64,6 +144,14 @@ fun HomeScreen(
                         .padding(24.dp),
                     contentAlignment = Alignment.BottomStart
                 ) {
+                    // Botón X para cerrar el drawer
+                    IconButton(
+                        onClick = { scope.launch { drawerState.close() } },
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar menú", tint = Color.White)
+                    }
+
                     Column {
                         Box(
                             modifier = Modifier
@@ -79,7 +167,6 @@ fun HomeScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(12.dp))
-                        // MOSTRAR DATOS: Nombre del usuario sin texto de carga
                         Text(
                             text = if (usuario != null) "${usuario?.nombres} ${usuario?.apellidos}" else "Usuario",
                             color = Color.White,
@@ -93,9 +180,9 @@ fun HomeScreen(
                         )
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(12.dp))
-                
+
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.History, null) },
                     label = { Text("Historial de reportes") },
@@ -107,11 +194,10 @@ fun HomeScreen(
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
                         unselectedIconColor = GreenPrimary,
-                        // SOPORTE MODO OSCURO: El texto de los items se adapta
                         unselectedTextColor = colores.onSurface
                     )
                 )
-                
+
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Settings, null) },
                     label = { Text("Configuración") },
@@ -128,15 +214,14 @@ fun HomeScreen(
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
-                
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                
+
                 NavigationDrawerItem(
                     icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) },
                     label = { Text("Cerrar Sesión") },
                     selected = false,
                     onClick = {
-                        repositorio.cerrarSesion()
+                        authRepositorio.cerrarSesion()
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }
@@ -155,16 +240,10 @@ fun HomeScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            "SafetyConnect",
-                            color = GreenPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("SafetyConnect", color = GreenPrimary, fontWeight = FontWeight.Bold)
                     },
                     navigationIcon = {
-                        IconButton(onClick = { 
-                            scope.launch { drawerState.open() }
-                        }) {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu", tint = GreenPrimary)
                         }
                     },
@@ -180,30 +259,32 @@ fun HomeScreen(
                                     .background(colores.secondaryContainer)
                             ) {
                                 Icon(
-                                    Icons.Default.Person, 
-                                    null, 
-                                    tint = colores.onSecondaryContainer, 
+                                    Icons.Default.Person,
+                                    null,
+                                    tint = colores.onSecondaryContainer,
                                     modifier = Modifier.padding(4.dp)
                                 )
                             }
                         }
                     },
-                    // SOPORTE MODO OSCURO: Fondo de la barra adaptable
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = colores.surface)
                 )
             },
-            bottomBar = {
-                BottomNavigationBar(navController = navController)
-            }
+            bottomBar = { BottomNavigationBar(navController = navController) }
         ) { paddingValues ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .background(colores.background) // SOPORTE MODO OSCURO: Fondo general
             ) {
-                MapContent()
+                MapaConReportes(
+                    reportes = reportes,
+                    camaraState = camaraState,
+                    locationGranted = locationPermission.status.isGranted,
+                    mapaOscuro = mapaOscuro
+                )
 
+                // Tarjeta de estado arriba
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -214,6 +295,26 @@ fun HomeScreen(
                     FilterChipsRow()
                 }
 
+                // Botones flotantes derecha — solo 2 ahora
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Botón 1: cambiar tema del mapa (claro/oscuro)
+                    MapActionButton(
+                        icon = if (mapaOscuro) Icons.Default.LightMode else Icons.Default.DarkMode,
+                        onClick = { mapaOscuro = !mapaOscuro }
+                    )
+                    // Botón 2: volver a mi ubicación
+                    MapActionButton(
+                        icon = Icons.Default.MyLocation,
+                        onClick = { scope.launch { volverAMiUbicacion() } }
+                    )
+                }
+
+                // SOS + Alerta abajo
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -245,25 +346,53 @@ fun HomeScreen(
                         }
                     }
                 }
-                
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MapActionButton(Icons.Default.Layers)
-                    MapActionButton(Icons.Default.MyLocation)
-                    MapActionButton(Icons.Default.NearMe)
-                }
             }
         }
     }
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun MapContent() {
-    Box(modifier = Modifier.fillMaxSize())
+fun MapaConReportes(
+    reportes: List<Reporte>,
+    camaraState: com.google.maps.android.compose.CameraPositionState,
+    locationGranted: Boolean,
+    mapaOscuro: Boolean
+) {
+    // Estilo oscuro para el mapa — JSON estándar de Google Maps
+    val estiloOscuro = """
+        [{"elementType":"geometry","stylers":[{"color":"#212121"}]},
+         {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
+         {"elementType":"labels.text.fill","stylers":[{"color":"#757575"}]},
+         {"elementType":"labels.text.stroke","stylers":[{"color":"#212121"}]},
+         {"featureType":"road","elementType":"geometry","stylers":[{"color":"#484848"}]},
+         {"featureType":"water","elementType":"geometry","stylers":[{"color":"#000000"}]}]
+    """.trimIndent()
+
+    GoogleMap(
+        modifier = Modifier.fillMaxSize(),
+        cameraPositionState = camaraState,
+        properties = MapProperties(
+            isMyLocationEnabled = locationGranted,
+            mapStyleOptions = if (mapaOscuro) MapStyleOptions(estiloOscuro) else null
+        ),
+        uiSettings = MapUiSettings(myLocationButtonEnabled = false)
+    ) {
+        reportes.forEach { reporte ->
+            if (reporte.latitud != 0.0 && reporte.longitud != 0.0) {
+                Marker(
+                    state = MarkerState(
+                        position = LatLng(reporte.latitud, reporte.longitud)
+                    ),
+                    title = reporte.categoria,
+                    snippet = reporte.descripcion.take(50),
+                    icon = BitmapDescriptorFactory.defaultMarker(
+                        colorPorCategoria(reporte.categoria)
+                    )
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -272,7 +401,6 @@ fun SecurityStatusCard() {
     Card(
         modifier = Modifier.fillMaxWidth(0.65f),
         shape = RoundedCornerShape(24.dp),
-        // SOPORTE MODO OSCURO: Superficie de tarjeta dinámica
         colors = CardDefaults.cardColors(containerColor = colores.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
@@ -307,7 +435,6 @@ fun FilterChipsRow() {
 fun FilterChipTemplate(text: String, icon: ImageVector, isSelected: Boolean) {
     val colores = MaterialTheme.colorScheme
     Surface(
-        // SOPORTE MODO OSCURO: Color de chip adaptable
         color = if (isSelected) colores.primary else colores.surface,
         shape = RoundedCornerShape(20.dp),
         shadowElevation = 2.dp,
@@ -333,16 +460,17 @@ fun FilterChipTemplate(text: String, icon: ImageVector, isSelected: Boolean) {
     }
 }
 
+// MapActionButton ahora recibe un onClick
 @Composable
-fun MapActionButton(icon: ImageVector) {
+fun MapActionButton(icon: ImageVector, onClick: () -> Unit = {}) {
     val colores = MaterialTheme.colorScheme
     Surface(
         modifier = Modifier.size(44.dp),
         shape = RoundedCornerShape(12.dp),
-        // SOPORTE MODO OSCURO: Botones flotantes del mapa adaptables
         color = colores.surface,
         shadowElevation = 4.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, colores.outlineVariant)
+        border = androidx.compose.foundation.BorderStroke(1.dp, colores.outlineVariant),
+        onClick = onClick
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = colores.primary)
