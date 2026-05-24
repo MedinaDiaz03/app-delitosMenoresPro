@@ -1,6 +1,8 @@
 package com.example.proyectofinal.components.screens
 
 import android.widget.Toast
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -28,8 +30,6 @@ import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.ui.theme.GreenPrimary
-import com.example.proyectofinal.ui.theme.OrangeAlert
-import com.example.proyectofinal.ui.theme.RedEmergency
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -320,38 +320,8 @@ fun HomeScreen(navController: NavController) {
                     )
                 }
 
-                // SOS + Alerta abajo
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Button(
-                        onClick = { },
-                        colors = ButtonDefaults.buttonColors(containerColor = RedEmergency),
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .size(80.dp)
-                            .padding(bottom = 8.dp),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Text("SOS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    }
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = OrangeAlert)
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Alerta Activa", fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                    }
-                }
+                // Botón SOS
+                BotonSOS(modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp))
             }
         }
     }
@@ -477,6 +447,58 @@ fun MapActionButton(icon: ImageVector, onClick: () -> Unit = {}) {
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = colores.primary)
+        }
+    }
+}
+
+// ─── BOTÓN SOS ─────────────────────────────────────────────────────────────────
+// Lógica simple: mantén presionado 1 segundo → llama al 105 (emergencias Perú)
+// Un toque corto muestra un aviso para evitar llamadas accidentales
+
+@Composable
+fun BotonSOS(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var mostrarDialogo by remember { mutableStateOf(false) }
+
+    // Diálogo de confirmación antes de llamar
+    if (mostrarDialogo) {
+        AlertDialog(
+            onDismissRequest = { mostrarDialogo = false },
+            icon = { Icon(Icons.Default.LocalPolice, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(36.dp)) },
+            title = { Text("¿Llamar a emergencias?", fontWeight = FontWeight.Bold) },
+            text  = { Text("Se marcará el número 105 (Policía Nacional del Perú). ¿Confirmas la llamada?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        mostrarDialogo = false
+                        // Lanzar la llamada — requiere permiso CALL_PHONE en el Manifest
+                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:105"))
+                        context.startActivity(intent)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE04F5F))
+                ) {
+                    Text("Llamar ahora", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mostrarDialogo = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    Button(
+        onClick = { mostrarDialogo = true },
+        shape = CircleShape,
+        modifier = modifier.size(72.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE04F5F)),
+        contentPadding = PaddingValues(0.dp),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.LocalPolice, null, tint = Color.White, modifier = Modifier.size(22.dp))
+            Text("SOS", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
         }
     }
 }

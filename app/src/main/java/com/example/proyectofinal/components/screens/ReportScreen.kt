@@ -258,9 +258,14 @@ fun ReportScreen(navController: NavController) {
 
                             var fotoUrl: String? = null
                             if (imagenUri != null) {
+                                Toast.makeText(context, "Subiendo foto...", Toast.LENGTH_SHORT).show()
                                 val uploadResult = storageRepositorio.subirImagen(imagenUri!!, "reportes")
                                 if (uploadResult.isSuccess) {
                                     fotoUrl = uploadResult.getOrNull()
+                                    Toast.makeText(context, "Foto subida OK", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    val error = uploadResult.exceptionOrNull()?.message ?: "Error desconocido"
+                                    Toast.makeText(context, "Error foto: $error", Toast.LENGTH_LONG).show()
                                 }
                             }
 

@@ -14,7 +14,7 @@ class ReporteRepositorio {
             val docRef = reportesCollection.document()
             val reporteConId = reporte.copy(id = docRef.id)
             docRef.set(reporteConId).await()
-            
+
             // Incrementar contador de reportes del usuario (opcional, o calcularlo dinámicamente)
             // Aquí podríamos actualizar el nivel de confianza si quisiéramos
 
@@ -60,4 +60,14 @@ class ReporteRepositorio {
             0
         }
     }
+
+    suspend fun obtenerReportePorId(reporteId: String): Reporte? {
+        return try {
+            val doc = reportesCollection.document(reporteId).get().await()
+            doc.toObject(Reporte::class.java)
+        } catch (_: Exception) { null }
+    }
 }
+
+// Extensión: obtener un reporte por su ID
+// Se usa desde ReportDetailScreen para evitar pasar objetos por navegación
