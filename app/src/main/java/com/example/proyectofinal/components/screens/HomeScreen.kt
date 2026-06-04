@@ -459,6 +459,7 @@ fun MapActionButton(icon: ImageVector, onClick: () -> Unit = {}) {
 fun BotonSOS(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var mostrarDialogo by remember { mutableStateOf(false) }
+    var confirmacion by remember { mutableStateOf(false) }
 
     // Diálogo de confirmación antes de llamar
     if (mostrarDialogo) {
@@ -481,10 +482,40 @@ fun BotonSOS(modifier: Modifier = Modifier) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { mostrarDialogo = false }) {
+                TextButton(onClick = {
+                    mostrarDialogo = false
+                    confirmacion=true
+                }) {
                     Text("Cancelar")
                 }
             }
+
+        )
+    }
+    else if (confirmacion) {
+        AlertDialog(
+            onDismissRequest = { mostrarDialogo = false },
+            icon = { Icon(Icons.Default.LocalPolice, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(36.dp)) },
+            title = { Text("¿estas segura krbo?", fontWeight = FontWeight.Bold) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        mostrarDialogo = false
+                        // Lanzar la llamada — requiere permiso CALL_PHONE en el Manifest
+                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:105"))
+                        context.startActivity(intent)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE04F5F))
+                ) {
+                    Text("Llamar ahora", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mostrarDialogo = false }) {
+                    Text("si estoy seguro")
+                }
+            }
+
         )
     }
 

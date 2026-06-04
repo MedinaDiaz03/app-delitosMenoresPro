@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
+import com.example.proyectofinal.components.auth.PrimaryInputField
 import com.example.proyectofinal.components.navigation.BottomNavigationBar
 import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
@@ -152,6 +153,18 @@ fun ReportScreen(navController: NavController) {
                     }
                 }
             )
+
+            Column() {
+
+                PrimaryInputField(
+                    value = "",
+                    onValueChange = {},
+                    label = "Repor anonimo?",
+                    placeholder = "",
+                    leadingIcon = Icons.Default.Email,
+                )
+                Text("")
+            }
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Categoría del incidente", fontWeight = FontWeight.Bold)

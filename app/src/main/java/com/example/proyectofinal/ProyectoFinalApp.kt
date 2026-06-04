@@ -5,8 +5,10 @@ import com.cloudinary.android.MediaManager
 import com.google.firebase.FirebaseApp
 
 class ProyectoFinalApp : Application() {
+    //Lo primero que inicia con la app
     override fun onCreate() {
         super.onCreate()
+        //La app inicia el servicio de firebase para tenerlo listo para usarlo
         FirebaseApp.initializeApp(this)
 
         // CONFIGURACIÓN DE CLOUDINARY
@@ -17,6 +19,9 @@ class ProyectoFinalApp : Application() {
             "secure" to true
         )
 
+        //En caso la conexión con cloudinary falla
+        //Esto le dice a la app que no se cierre
+        //Solo que suelte un mensaje de error y siga arrancando la app
         try {
             MediaManager.init(this, config)
         } catch (e: Exception) {

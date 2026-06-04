@@ -15,7 +15,7 @@ class ReporteRepositorio {
             val reporteConId = reporte.copy(id = docRef.id)
             docRef.set(reporteConId).await()
 
-            // Incrementar contador de reportes del usuario (opcional, o calcularlo dinámicamente)
+            // Incrementar contador de reportes del usuario
             // Aquí podríamos actualizar el nivel de confianza si quisiéramos
 
             Result.success(true)

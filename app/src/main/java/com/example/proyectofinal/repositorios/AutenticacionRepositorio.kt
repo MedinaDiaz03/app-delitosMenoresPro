@@ -6,24 +6,24 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 class AutenticacionRepositorio {
-    private val autenticacion: FirebaseAuth = FirebaseAuth.getInstance()
-    private val baseDeDatos: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val autenticacion: FirebaseAuth = FirebaseAuth.getInstance()//escanea que el correo y la contraseña son correctos
+    private val baseDeDatos: FirebaseFirestore = FirebaseFirestore.getInstance()//guarda las credenciales del usuario
 
     suspend fun registrarUsuario(usuario: Usuario, contrasena: String): Result<Boolean> {
         return try {
-            val resultado = autenticacion.createUserWithEmailAndPassword(usuario.correo, contrasena).await()
-            val uid = resultado.user?.uid ?: throw Exception("No se pudo obtener el ID del usuario")
+            val resultado = autenticacion.createUserWithEmailAndPassword(usuario.correo, contrasena).await()//crea una llave para este usuario
+            val uid = resultado.user?.uid ?: throw Exception("No se pudo obtener el ID del usuario")//con la llave crear un uid secreto
             
-            val usuarioConId = usuario.copy(id = uid)
+            val usuarioConId = usuario.copy(id = uid)//toma el número secreto y se lo asigna al usuario
             
-            baseDeDatos.collection("usuarios")
+            baseDeDatos.collection("usuarios")//guarda al usuario con ese uid y guarda las credenciales
                 .document(uid)
                 .set(usuarioConId)
                 .await()
             
             Result.success(true)
-        } catch (e: Exception) {
-            Result.failure(e)
+        } catch (e: Exception) {//esto le dice que si algo falla solo deja un mensaje de error y sigue funcionando
+                Result.failure(e)
         }
     }
 
