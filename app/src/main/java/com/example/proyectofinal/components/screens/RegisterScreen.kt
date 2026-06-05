@@ -27,9 +27,8 @@ fun RegisterScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
     val repositorio = remember { AutenticacionRepositorio() }
 
-    var nombres by remember { mutableStateOf("") }
-    var apellidos by remember { mutableStateOf("") }
-    var dni by remember { mutableStateOf("") }
+    var nombreCompleto by remember { mutableStateOf("") }
+    // var dni by remember { mutableStateOf("") } // DNI ya no es parte del modelo Usuario
     var correo by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -62,33 +61,19 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Nombres y Apellidos (Solo letras)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
                 PrimaryInputField(
-                    value = nombres,
-                    onValueChange = { if (soloLetras(it)) nombres = it },
-                    label = "Nombres",
-                    placeholder = "Ej. Juan",
+                    value = nombreCompleto,
+                    onValueChange = { if (soloLetras(it)) nombreCompleto = it },
+                    label = "Nombre completo",
+                    placeholder = "Ej. Juan Pérez",
                     leadingIcon = Icons.Default.Person,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
-
-                PrimaryInputField(
-                    value = apellidos,
-                    onValueChange = { if (soloLetras(it)) apellidos = it },
-                    label = "Apellidos",
-                    placeholder = "Ej. Pérez",
-                    leadingIcon = Icons.Default.Person,
-                    modifier = Modifier.weight(1f)
-                )
-            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // DNI (Solo números, max 8)
+            /*
+            // DNI ya no se guarda en el modelo Usuario
             PrimaryInputField(
                 value = dni,
                 onValueChange = { if (it.length <= 8 && it.all { char -> char.isDigit() }) dni = it },
@@ -96,6 +81,7 @@ fun RegisterScreen(navController: NavController) {
                 placeholder = "Número de documento",
                 leadingIcon = Icons.Default.Badge
             )
+            */
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -148,7 +134,7 @@ fun RegisterScreen(navController: NavController) {
                     text = "Crear cuenta",
                     onClick = {
                         // REQUISITO: Todos los campos llenos
-                        if (nombres.isBlank() || apellidos.isBlank() || dni.isBlank() || 
+                        if (nombreCompleto.isBlank() || 
                             correo.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
                             Toast.makeText(context, "Todos los campos tienen que ser llenados", Toast.LENGTH_SHORT).show()
                             return@PrimaryButton
@@ -172,10 +158,10 @@ fun RegisterScreen(navController: NavController) {
 
                         isLoading = true
                         val nuevoUsuario = Usuario(
-                            nombres = nombres,
-                            apellidos = apellidos,
-                            dni = dni,
-                            correo = correo
+                            nombre = nombreCompleto,
+                            email = correo,
+                            rol = "ciudadano",
+                            verificado = false
                         )
 
                         scope.launch {

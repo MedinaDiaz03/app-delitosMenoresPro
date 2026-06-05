@@ -283,8 +283,8 @@ fun ReportScreen(navController: NavController) {
                             }
 
                             val nuevoReporte = Reporte(
-                                usuarioId = usuario?.id ?: "",
-                                usuarioNombre = "${usuario?.nombres} ${usuario?.apellidos}",
+                                usuarioId = usuario?.uid ?: "",
+                                usuarioNombre = usuario?.nombre ?: "Usuario",
                                 categoria = categoriaSeleccionada!!,
                                 descripcion = descripcion,
                                 latitud = ubicacion?.latitude ?: 0.0,

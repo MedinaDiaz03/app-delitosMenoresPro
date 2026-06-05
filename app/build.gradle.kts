@@ -66,6 +66,7 @@ dependencies {
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-analytics")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.1")
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
     implementation(libs.play.services.location)
     implementation(libs.accompanist.permissions)
     implementation(libs.androidx.compose.runtime)

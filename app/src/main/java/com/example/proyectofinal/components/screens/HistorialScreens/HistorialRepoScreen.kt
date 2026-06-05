@@ -48,7 +48,7 @@ fun HistorialRepoScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         val usuario = authRepositorio.obtenerDatosUsuarioActual()
         if (usuario != null) {
-            reportes = reportRepositorio.obtenerReportesPorUsuario(usuario.id)
+            reportes = reportRepositorio.obtenerReportesPorUsuario(usuario.uid)
         }
         cargando = false
     }

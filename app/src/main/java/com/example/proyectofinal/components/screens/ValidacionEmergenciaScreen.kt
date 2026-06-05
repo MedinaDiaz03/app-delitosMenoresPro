@@ -15,8 +15,15 @@ fun ValidacionEmergenciaScreen(
     onValidarComoPolicia: (String) -> Unit = {},   // lambda temporal
     onSolicitarValidacion: (String) -> Unit = {}   // lambda temporal
 ) {
-    val rol by rolHelper.obtenerRolActual().collectAsState(initial = "comun")
-    val esPolicia = rol == "policia"
+
+
+    var esPolicia by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        rolHelper.obtenerRol { rol ->
+            esPolicia = rol == "policia"
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),

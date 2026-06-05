@@ -6,30 +6,50 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 class AutenticacionRepositorio {
-    private val autenticacion: FirebaseAuth = FirebaseAuth.getInstance()//escanea que el correo y la contraseña son correctos
-    private val baseDeDatos: FirebaseFirestore = FirebaseFirestore.getInstance()//guarda las credenciales del usuario
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val db: FirebaseFirestore = FirebaseFirestore.getInstance()
+
+    fun guardarUsuarioEnFirestore() {
+        val user = auth.currentUser ?: return
+
+        val userRef = db.collection("usuarios").document(user.uid)
+
+        userRef.get().addOnSuccessListener { document ->
+            if (!document.exists()) {
+                val nuevoUsuario = Usuario(
+                    uid = user.uid,
+                    nombre = user.displayName ?: "Usuario",
+                    email = user.email ?: "",
+                    rol = "ciudadano",
+                    verificado = false
+                )
+                userRef.set(nuevoUsuario)
+            }
+        }
+    }
 
     suspend fun registrarUsuario(usuario: Usuario, contrasena: String): Result<Boolean> {
         return try {
-            val resultado = autenticacion.createUserWithEmailAndPassword(usuario.correo, contrasena).await()//crea una llave para este usuario
-            val uid = resultado.user?.uid ?: throw Exception("No se pudo obtener el ID del usuario")//con la llave crear un uid secreto
+            val resultado = auth.createUserWithEmailAndPassword(usuario.email, contrasena).await()
+            val uid = resultado.user?.uid ?: throw Exception("No se pudo obtener el ID del usuario")
             
-            val usuarioConId = usuario.copy(id = uid)//toma el número secreto y se lo asigna al usuario
+            val usuarioConId = usuario.copy(uid = uid)
             
-            baseDeDatos.collection("usuarios")//guarda al usuario con ese uid y guarda las credenciales
+            db.collection("usuarios")
                 .document(uid)
                 .set(usuarioConId)
                 .await()
             
             Result.success(true)
-        } catch (e: Exception) {//esto le dice que si algo falla solo deja un mensaje de error y sigue funcionando
-                Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
     suspend fun iniciarSesion(correo: String, contrasena: String): Result<Boolean> {
         return try {
-            autenticacion.signInWithEmailAndPassword(correo, contrasena).await()
+            auth.signInWithEmailAndPassword(correo, contrasena).await()
+            guardarUsuarioEnFirestore()
             Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)
@@ -38,12 +58,22 @@ class AutenticacionRepositorio {
 
     suspend fun obtenerDatosUsuarioActual(): Usuario? {
         return try {
-            val uid = autenticacion.currentUser?.uid ?: return null
-            val documento = baseDeDatos.collection("usuarios").document(uid).get().await()
+            val userFirebase = auth.currentUser ?: return null
+            val uid = userFirebase.uid
+            val documento = db.collection("usuarios").document(uid).get().await()
+            
             if (documento.exists()) {
                 documento.toObject(Usuario::class.java)
             } else {
-                null
+                val nuevoUsuario = Usuario(
+                    uid = uid,
+                    nombre = userFirebase.displayName ?: "Usuario",
+                    email = userFirebase.email ?: "",
+                    rol = "ciudadano",
+                    verificado = false
+                )
+                db.collection("usuarios").document(uid).set(nuevoUsuario).await()
+                nuevoUsuario
             }
         } catch (_: Exception) {
             null
@@ -52,16 +82,16 @@ class AutenticacionRepositorio {
 
     suspend fun recuperarContrasena(correo: String): Result<Boolean> {
         return try {
-            autenticacion.sendPasswordResetEmail(correo).await()
+            auth.sendPasswordResetEmail(correo).await()
             Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    fun obtenerUsuarioActual() = autenticacion.currentUser
+    fun obtenerUsuarioActual() = auth.currentUser
 
     fun cerrarSesion() {
-        autenticacion.signOut()
+        auth.signOut()
     }
 }

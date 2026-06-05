@@ -12,5 +12,6 @@ data class Reporte(
     val longitud: Double = 0.0,
     val fecha: Timestamp = Timestamp.now(),//jala la hora exacta desde firebase
     val fotoUrl: String? = null,//la foto en un reporte es opcional
-    var anonimo: Boolean = false
+    var anonimo: Boolean = false,
+    val estado: String = "activo"
 )

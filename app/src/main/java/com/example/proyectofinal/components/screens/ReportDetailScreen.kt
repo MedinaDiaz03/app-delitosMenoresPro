@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.example.proyectofinal.modelos.Reporte
+import com.example.proyectofinal.modelos.Usuario
+import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.ui.theme.GreenPrimary
 import java.text.SimpleDateFormat
@@ -38,14 +40,17 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportDetailScreen(navController: NavController, reporteId: String) {
-    val repositorio = remember { ReporteRepositorio() }
+    val authRepo = remember { AutenticacionRepositorio() }
+    val repo = remember { ReporteRepositorio() }
     var reporte by remember { mutableStateOf<Reporte?>(null) }
+    var usuarioActual by remember { mutableStateOf<Usuario?>(null) }
     var cargando by remember { mutableStateOf(true) }
     val colores = MaterialTheme.colorScheme
 
-    // Carga el reporte por ID desde Firestore
+    // Carga el reporte por ID y los datos del usuario actual
     LaunchedEffect(reporteId) {
-        reporte = repositorio.obtenerReportePorId(reporteId)
+        usuarioActual = authRepo.obtenerDatosUsuarioActual()
+        reporte = repo.obtenerReportePorId(reporteId)
         cargando = false
     }
 
@@ -81,7 +86,16 @@ fun ReportDetailScreen(navController: NavController, reporteId: String) {
             }
 
             // Mostrar detalle
-            else -> DetalleContenido(reporte = reporte!!, padding = padding, colores = colores)
+            else -> DetalleContenido(
+                reporte = reporte!!, 
+                padding = padding, 
+                colores = colores,
+                esPolicia = usuarioActual?.rol == "policia",
+                onCambiarEstado = { nuevoEstado ->
+                    repo.actualizarEstadoReporte(reporteId, nuevoEstado)
+                    navController.popBackStack()
+                }
+            )
         }
     }
 }
@@ -89,7 +103,13 @@ fun ReportDetailScreen(navController: NavController, reporteId: String) {
 // ─── CONTENIDO DEL DETALLE ────────────────────────────────────────────────────
 
 @Composable
-fun DetalleContenido(reporte: Reporte, padding: PaddingValues, colores: ColorScheme) {
+fun DetalleContenido(
+    reporte: Reporte, 
+    padding: PaddingValues, 
+    colores: ColorScheme,
+    esPolicia: Boolean,
+    onCambiarEstado: (String) -> Unit
+) {
     val fecha = try {
         if (reporte.fecha != null)
             SimpleDateFormat("dd MMM, yyyy • HH:mm", Locale.getDefault()).format(reporte.fecha.toDate())
@@ -211,6 +231,41 @@ fun DetalleContenido(reporte: Reporte, padding: PaddingValues, colores: ColorSch
                     lineHeight = 22.sp,
                     color = colores.onSurface
                 )
+            }
+        }
+
+        // ── GESTIÓN DE ESTADO (SOLO POLICÍA) ──
+        if (esPolicia) {
+            HorizontalDivider(color = colores.outlineVariant.copy(alpha = 0.5f))
+            Text("Gestión de Reporte", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { onCambiarEstado("en_proceso") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA000)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Marcar en Proceso ⚠", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = { onCambiarEstado("resuelto") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Marcar como Resuelto ✅", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = { onCambiarEstado("falso") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE04F5F)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Marcar como Falso ❌", color = Color.White, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

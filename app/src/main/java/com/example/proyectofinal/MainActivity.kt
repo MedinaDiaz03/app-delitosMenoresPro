@@ -11,6 +11,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.proyectofinal.components.screens.AlertsScreen
 import com.example.proyectofinal.components.screens.HistorialScreens.HistorialRepoScreen
+import com.example.proyectofinal.components.screens.HistorialGlobalScreen
 import com.example.proyectofinal.components.screens.HomeScreen
 import com.example.proyectofinal.components.screens.LoginScreen
 import com.example.proyectofinal.components.screens.ProfileScreen
@@ -42,6 +43,7 @@ class MainActivity : ComponentActivity() {
                         composable("alerts")        { AlertsScreen(navController) }
                         composable("profile")       { ProfileScreen(navController) }
                         composable("historial_repo") { HistorialRepoScreen(navController) }
+                        composable("historial_global") { HistorialGlobalScreen(navController) }
 
                         // El ID del reporte viaja en la ruta → sin riesgo de perder el objeto
                         composable("report_detail/{reporteId}") { backStack ->
@@ -50,7 +52,7 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("validacion/{reporteId}") { backStackEntry ->
                             val reporteId = backStackEntry.arguments?.getString("reporteId") ?: ""
-                            val rolHelper = MockRolHelper()
+                            val rolHelper = RolHelper()
                             ValidacionEmergenciaScreen(
                                 rolHelper = rolHelper,
                                 reporteId = reporteId,
@@ -69,6 +71,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-class MockRolHelper : RolHelper {
-    override fun obtenerRolActual(): Flow<String> = flowOf("comun") // o "policia" para probar
-}
+

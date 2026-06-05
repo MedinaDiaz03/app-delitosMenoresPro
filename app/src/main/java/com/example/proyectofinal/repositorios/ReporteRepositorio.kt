@@ -67,6 +67,20 @@ class ReporteRepositorio {
             doc.toObject(Reporte::class.java)
         } catch (_: Exception) { null }
     }
+
+    fun actualizarEstadoReporte(reporteId: String, nuevoEstado: String) {
+        reportesCollection.document(reporteId).update("estado", nuevoEstado)
+    }
+
+    fun obtenerTodosLosReportes(onResult: (List<Reporte>) -> Unit) {
+        reportesCollection
+            .orderBy("fecha", Query.Direction.DESCENDING)
+            .get()
+            .addOnSuccessListener { result ->
+                val lista = result.toObjects(Reporte::class.java)
+                onResult(lista)
+            }
+    }
 }
 
 // Extensión: obtener un reporte por su ID

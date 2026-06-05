@@ -22,6 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import kotlinx.coroutines.launch
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.*
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.*
 
 @Composable
 fun LoginScreen(navController: NavController) {
@@ -32,6 +39,51 @@ fun LoginScreen(navController: NavController) {
     var correo by remember { mutableStateOf("") }
     var contrasena by remember { mutableStateOf("") }
     var estaCargando by remember { mutableStateOf(false) }
+
+    // --- CONFIGURACIÓN GOOGLE SIGN-IN ---
+    val auth = FirebaseAuth.getInstance()
+    val gso = remember {
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken("738190982265-r5q3tl92qurcgqn362ds9acghn1pist3.apps.googleusercontent.com")
+            .requestEmail()
+            .build()
+    }
+    val googleSignInClient = remember { GoogleSignIn.getClient(contexto, gso) }
+
+    fun firebaseAuthWithGoogle(idToken: String) {
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        auth.signInWithCredential(credential)
+            .addOnCompleteListener { task ->
+                estaCargando = false
+                if (task.isSuccessful) {
+                    repositorio.guardarUsuarioEnFirestore()
+                    Toast.makeText(contexto, "Bienvenido: ${auth.currentUser?.displayName}", Toast.LENGTH_SHORT).show()
+                    navController.navigate("home") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                } else {
+                    Toast.makeText(contexto, "Error en Firebase: ${task.exception?.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                account?.idToken?.let { firebaseAuthWithGoogle(it) }
+            } catch (e: ApiException) {
+                estaCargando = false
+                Toast.makeText(contexto, "Error de Google: ${e.statusCode}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            estaCargando = false
+        }
+    }
+    // ------------------------------------
 
     // Verificar si el usuario ya inició sesión para saltar el login
     LaunchedEffect(Unit) {
@@ -159,7 +211,11 @@ fun LoginScreen(navController: NavController) {
                 icon = Icons.Default.AccountCircle,
                 title = "Google",
                 subtitle = "Acceso corporativo",
-                onClick = { }
+                onClick = {
+                    estaCargando = true
+                    val signInIntent = googleSignInClient.signInIntent
+                    launcher.launch(signInIntent)
+                }
             )
 
             Spacer(modifier = Modifier.height(8.dp))

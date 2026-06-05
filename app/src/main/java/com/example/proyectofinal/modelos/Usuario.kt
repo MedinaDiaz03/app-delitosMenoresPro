@@ -1,11 +1,9 @@
 package com.example.proyectofinal.modelos
 
 data class Usuario(
-    var id: String = "",
-    var nombres: String = "",
-    var apellidos: String = "",
-    var dni: String = "",
-    var correo: String = "",
-    var nivelConfianza: Int = 0,
-    var reportesValidados: Int = 0
+    val uid: String = "",
+    val nombre: String = "",
+    val email: String = "",
+    val rol: String = "ciudadano",
+    val verificado: Boolean = false
 )

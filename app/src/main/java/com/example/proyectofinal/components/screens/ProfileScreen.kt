@@ -28,6 +28,9 @@ import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.ui.theme.GreenPrimary
+import coil.compose.AsyncImage
+import com.example.proyectofinal.helpers.RolHelper
+import com.google.firebase.auth.FirebaseAuth
 
 // ─── PANTALLA DE PERFIL ────────────────────────────────────────────────────────
 
@@ -45,7 +48,7 @@ fun ProfileScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         usuario = authRepo.obtenerDatosUsuarioActual()
         if (usuario != null) {
-            totalReportes = reportRepo.obtenerConteoReportesUsuario(usuario!!.id)
+            totalReportes = reportRepo.obtenerConteoReportesUsuario(usuario!!.uid)
         }
     }
 
@@ -101,14 +104,14 @@ fun ProfileScreen(navController: NavController) {
                     )
                     EstadisticaChip(
                         modifier = Modifier.weight(1f),
-                        valor = (usuario?.reportesValidados ?: 0).toString(),
+                        valor = (0).toString(), // TODO: Adaptar si se agregan estos campos al nuevo modelo
                         etiqueta = "Validados",
                         icono = Icons.Default.Verified,
                         color = Color(0xFF3B82F6)
                     )
                     EstadisticaChip(
                         modifier = Modifier.weight(1f),
-                        valor = nivelDeConfianza(usuario?.reportesValidados ?: 0),
+                        valor = nivelDeConfianza(0),
                         etiqueta = "Nivel",
                         icono = Icons.Default.Star,
                         color = Color(0xFFF59E0B)
@@ -116,10 +119,41 @@ fun ProfileScreen(navController: NavController) {
                 }
 
                 // Barra de progreso de nivel
-                NivelDeConfianzaCard(puntos = usuario?.reportesValidados ?: 0)
+                NivelDeConfianzaCard(puntos = 0)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // ── VERIFICACIÓN OFICIAL ──
+            if (usuario?.rol != "policia") {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Validación de Personal", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    var codigoInput by remember { mutableStateOf("") }
+                    val rolHelper = remember { RolHelper() }
+
+                    OutlinedTextField(
+                        value = codigoInput,
+                        onValueChange = { codigoInput = it },
+                        label = { Text("Código de Oficial") },
+                        placeholder = { Text("Ingresa el código secreto") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        trailingIcon = {
+                            IconButton(onClick = { rolHelper.validarCodigoPolicia(context, codigoInput) }) {
+                                Icon(Icons.Default.VerifiedUser, null, tint = GreenPrimary)
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = GreenPrimary,
+                            focusedLabelColor = GreenPrimary
+                        )
+                    )
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
 
             // ── MENÚ DE OPCIONES ──
             Column(
@@ -133,6 +167,12 @@ fun ProfileScreen(navController: NavController) {
                     titulo = "Historial de reportes",
                     subtitulo = "Ver todos tus reportes enviados",
                     onClick = { navController.navigate("historial_repo") }
+                )
+                OpcionMenu(
+                    icono = Icons.Default.Public,
+                    titulo = "Historial Global 🌍",
+                    subtitulo = "Ver todos los reportes de la zona",
+                    onClick = { navController.navigate("historial_global") }
                 )
                 OpcionMenu(
                     icono = Icons.Default.ContactPhone,
@@ -163,6 +203,9 @@ fun ProfileScreen(navController: NavController) {
 
 @Composable
 fun PerfilCabecera(usuario: Usuario?) {
+    val userFirebase = remember { FirebaseAuth.getInstance().currentUser }
+    val photoUrl = userFirebase?.photoUrl
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -195,7 +238,7 @@ fun PerfilCabecera(usuario: Usuario?) {
                 .align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Avatar
+            // Avatar con soporte para foto de Google
             Box(
                 modifier = Modifier
                     .size(90.dp)
@@ -204,35 +247,51 @@ fun PerfilCabecera(usuario: Usuario?) {
                     .border(3.dp, Color.White.copy(alpha = 0.6f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Default.Person,
-                    null,
-                    modifier = Modifier.size(52.dp),
-                    tint = Color.White
-                )
+                if (photoUrl != null) {
+                    AsyncImage(
+                        model = photoUrl,
+                        contentDescription = "Foto de perfil",
+                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Person,
+                        null,
+                        modifier = Modifier.size(52.dp),
+                        tint = Color.White
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Fallback lógico: Prioriza Firestore, luego Firebase Auth, luego placeholder
+            val nombreAMostrar = when {
+                usuario != null && usuario.nombre.isNotEmpty() -> usuario.nombre
+                userFirebase?.displayName != null -> userFirebase.displayName
+                else -> "Usuario"
+            }
+
             Text(
-                text = if (usuario != null) "${usuario.nombres} ${usuario.apellidos}" else "Cargando...",
+                text = nombreAMostrar ?: "Cargando...",
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp
             )
             Text(
-                text = usuario?.correo ?: "",
+                text = usuario?.email ?: userFirebase?.email ?: "",
                 color = Color.White.copy(alpha = 0.8f),
                 fontSize = 13.sp
             )
-            if (!usuario?.dni.isNullOrEmpty()) {
+            
+            if (usuario?.rol == "policia") {
                 Spacer(modifier = Modifier.height(4.dp))
                 Surface(
                     color = Color.White.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Text(
-                        "DNI: ${usuario?.dni}",
+                        "Oficial Verificado",
                         color = Color.White,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)

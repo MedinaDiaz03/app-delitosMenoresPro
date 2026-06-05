@@ -45,18 +45,19 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val CAJAMARCA = LatLng(-7.1638, -78.5001)
 
-private fun colorPorCategoria(categoria: String): Float {
-    return when (categoria) {
-        "Robo" -> BitmapDescriptorFactory.HUE_RED
-        "Vandalismo" -> BitmapDescriptorFactory.HUE_ORANGE
-        "Pelea" -> BitmapDescriptorFactory.HUE_YELLOW
-        "Drogas" -> BitmapDescriptorFactory.HUE_VIOLET
-        "Acoso" -> BitmapDescriptorFactory.HUE_ROSE
-        "Infraestructura" -> BitmapDescriptorFactory.HUE_AZURE
+private fun obtenerColorMarker(categoria: String): Float {
+    return when (categoria.lowercase()) {
+        "robo" -> BitmapDescriptorFactory.HUE_RED
+        "vandalismo" -> BitmapDescriptorFactory.HUE_ORANGE
+        "pelea" -> BitmapDescriptorFactory.HUE_YELLOW
+        "drogas" -> BitmapDescriptorFactory.HUE_VIOLET
+        "acoso" -> BitmapDescriptorFactory.HUE_ROSE
+        "infraestructura" -> BitmapDescriptorFactory.HUE_AZURE
         else -> BitmapDescriptorFactory.HUE_RED
     }
 }
@@ -75,6 +76,15 @@ fun HomeScreen(navController: NavController) {
     var usuario by remember { mutableStateOf<Usuario?>(null) }
     var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
     var mapaOscuro by remember { mutableStateOf(false) }
+    var marcadoresVisibles by remember { mutableStateOf(true) }
+
+    // Animación de parpadeo para los reportes
+    LaunchedEffect(Unit) {
+        while (true) {
+            marcadoresVisibles = !marcadoresVisibles
+            delay(800)
+        }
+    }
 
     // Permiso de ubicación — lo pedimos aquí en el Home
     val locationPermission = rememberPermissionState(
@@ -87,8 +97,15 @@ fun HomeScreen(navController: NavController) {
 
     // Pedir permiso al entrar a la pantalla
     LaunchedEffect(Unit) {
-        usuario = authRepositorio.obtenerDatosUsuarioActual()
-        reportes = reporteRepositorio.obtenerReportes()
+        val datosUsuario = authRepositorio.obtenerDatosUsuarioActual()
+        usuario = datosUsuario
+
+        // DINÁMICO: Solo los policías cargan y ven los reportes activos
+        if (datosUsuario?.rol == "policia") {
+            reportes = reporteRepositorio.obtenerReportes().filter { it.estado == "activo" }
+        } else {
+            reportes = emptyList()
+        }
 
         if (!locationPermission.status.isGranted) {
             locationPermission.launchPermissionRequest()
@@ -174,13 +191,13 @@ fun HomeScreen(navController: NavController) {
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (usuario != null) "${usuario?.nombres} ${usuario?.apellidos}" else "Usuario",
+                            text = usuario?.nombre ?: "Usuario",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp
                         )
                         Text(
-                            text = usuario?.correo ?: "",
+                            text = usuario?.email ?: "",
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 12.sp
                         )
@@ -196,6 +213,21 @@ fun HomeScreen(navController: NavController) {
                     onClick = {
                         scope.launch { drawerState.close() }
                         navController.navigate("historial_repo")
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedIconColor = GreenPrimary,
+                        unselectedTextColor = colores.onSurface
+                    )
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Public, null) },
+                    label = { Text("Historial Global 🌍") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        navController.navigate("historial_global")
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
@@ -287,7 +319,10 @@ fun HomeScreen(navController: NavController) {
                     reportes = reportes,
                     camaraState = camaraState,
                     locationGranted = locationPermission.status.isGranted,
-                    mapaOscuro = mapaOscuro
+                    mapaOscuro = mapaOscuro,
+                    esPolicia = usuario?.rol == "policia",
+                    marcadoresVisibles = marcadoresVisibles,
+                    navController = navController
                 )
 
                 // Tarjeta de estado arriba
@@ -333,7 +368,10 @@ fun MapaConReportes(
     reportes: List<Reporte>,
     camaraState: com.google.maps.android.compose.CameraPositionState,
     locationGranted: Boolean,
-    mapaOscuro: Boolean
+    mapaOscuro: Boolean,
+    esPolicia: Boolean,
+    marcadoresVisibles: Boolean,
+    navController: NavController
 ) {
     val context = LocalContext.current // Necesitamos el contexto para leer el archivo
 
@@ -351,18 +389,23 @@ fun MapaConReportes(
         properties = propiedadesMapa,
         uiSettings = MapUiSettings(myLocationButtonEnabled = false)
     ) {
-        reportes.forEach { reporte ->
-            if (reporte.latitud != 0.0 && reporte.longitud != 0.0) {
-                Marker(
-                    state = MarkerState(
-                        position = LatLng(reporte.latitud, reporte.longitud)
-                    ),
-                    title = reporte.categoria,
-                    snippet = reporte.descripcion.take(50),
-                    icon = BitmapDescriptorFactory.defaultMarker(
-                        colorPorCategoria(reporte.categoria)
+        if (esPolicia && marcadoresVisibles) {
+            reportes.forEach { reporte ->
+                if (reporte.latitud != 0.0 && reporte.longitud != 0.0) {
+                    val color = obtenerColorMarker(reporte.categoria)
+                    Marker(
+                        state = MarkerState(
+                            position = LatLng(reporte.latitud, reporte.longitud)
+                        ),
+                        title = "Reporte",
+                        snippet = reporte.categoria,
+                        icon = BitmapDescriptorFactory.defaultMarker(color),
+                        onClick = {
+                            navController.navigate("report_detail/${reporte.id}")
+                            true
+                        }
                     )
-                )
+                }
             }
         }
     }
@@ -496,7 +539,7 @@ fun BotonSOS(modifier: Modifier = Modifier) {
         AlertDialog(
             onDismissRequest = { mostrarDialogo = false },
             icon = { Icon(Icons.Default.LocalPolice, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(36.dp)) },
-            title = { Text("¿estas segura krbo?", fontWeight = FontWeight.Bold) },
+            title = { Text("¿estás seguro(a) que quieres cancelar la llamada?", fontWeight = FontWeight.Bold) },
             confirmButton = {
                 Button(
                     onClick = {
