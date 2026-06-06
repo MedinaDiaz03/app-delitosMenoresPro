@@ -42,12 +42,14 @@ fun HistorialRepoScreen(navController: NavController) {
     var reportes  by remember { mutableStateOf<List<Reporte>>(emptyList()) }
     var cargando  by remember { mutableStateOf(true) }
     var filtro    by remember { mutableStateOf("Todos") }
+    var esPolicia by remember { mutableStateOf(false) }
     val colores = MaterialTheme.colorScheme
 
     // Cargar reportes del usuario al entrar
     LaunchedEffect(Unit) {
         val usuario = authRepositorio.obtenerDatosUsuarioActual()
         if (usuario != null) {
+            esPolicia = usuario.rol == "policia"
             reportes = reportRepositorio.obtenerReportesPorUsuario(usuario.uid)
         }
         cargando = false
@@ -60,7 +62,7 @@ fun HistorialRepoScreen(navController: NavController) {
     Scaffold(
         containerColor = colores.background,
         topBar = { HistorialTopBar(navController) },
-        bottomBar = { HistorialBottomBar(navController) }
+        bottomBar = { HistorialBottomBar(navController, esPolicia) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -111,7 +113,7 @@ fun HistorialRepoScreen(navController: NavController) {
                 cargando -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = GreenPrimary)
                 }
-                reportesFiltrados.isEmpty() -> HistorialVacioView(navController)
+                reportesFiltrados.isEmpty() -> HistorialVacioView(navController, esPolicia)
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                     contentPadding = PaddingValues(vertical = 12.dp),
@@ -239,7 +241,7 @@ fun ReportCard(reporte: Reporte, navController: NavController) {
 // ─── VISTA VACÍA ──────────────────────────────────────────────────────────────
 
 @Composable
-fun HistorialVacioView(navController: NavController) {
+fun HistorialVacioView(navController: NavController, esPolicia: Boolean = false) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -275,17 +277,19 @@ fun HistorialVacioView(navController: NavController) {
             lineHeight = 22.sp
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        if (!esPolicia) {
+            Spacer(modifier = Modifier.height(32.dp))
 
-        Button(
-            onClick = { navController.navigate("report") },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Icon(Icons.Default.Add, null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Hacer primer reporte", fontWeight = FontWeight.Bold)
+            Button(
+                onClick = { navController.navigate("report") },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.Add, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Hacer primer reporte", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -325,7 +329,7 @@ fun HistorialTopBar(navController: NavController) {
 // ─── BOTTOM BAR ───────────────────────────────────────────────────────────────
 
 @Composable
-fun HistorialBottomBar(navController: NavController) {
+fun HistorialBottomBar(navController: NavController, esPolicia: Boolean = false) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 8.dp
@@ -336,12 +340,14 @@ fun HistorialBottomBar(navController: NavController) {
             icon = { Icon(Icons.Default.Map, "Mapa") },
             label = { Text("Mapa") }
         )
-        NavigationBarItem(
-            selected = false,
-            onClick = { navController.navigate("report") },
-            icon = { Icon(Icons.Default.AddCircle, "Reportar") },
-            label = { Text("Reportar") }
-        )
+        if (!esPolicia) {
+            NavigationBarItem(
+                selected = false,
+                onClick = { navController.navigate("report") },
+                icon = { Icon(Icons.Default.AddCircle, "Reportar") },
+                label = { Text("Reportar") }
+            )
+        }
         NavigationBarItem(
             selected = true,
             onClick = { },

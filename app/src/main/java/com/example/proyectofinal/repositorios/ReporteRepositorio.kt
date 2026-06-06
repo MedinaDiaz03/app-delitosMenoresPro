@@ -81,6 +81,22 @@ class ReporteRepositorio {
                 onResult(lista)
             }
     }
+
+    suspend fun confirmarReporte(id: String) {
+        try {
+            reportesCollection.document(id)
+                .update("confirmaciones", com.google.firebase.firestore.FieldValue.increment(1))
+                .await()
+        } catch (_: Exception) {}
+    }
+
+    suspend fun desmentirReporte(id: String) {
+        try {
+            reportesCollection.document(id)
+                .update("desmentidos", com.google.firebase.firestore.FieldValue.increment(1))
+                .await()
+        } catch (_: Exception) {}
+    }
 }
 
 // Extensión: obtener un reporte por su ID

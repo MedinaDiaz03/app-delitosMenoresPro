@@ -36,4 +36,30 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
     }
+
+    fun mostrarNotificacion(context: Context, titulo: String, mensaje: String) {
+        val alertChannelId = "alertas_inmediatas"
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                alertChannelId,
+                "Alertas de Seguridad",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notificaciones de incidentes en tiempo real"
+            }
+            manager.createNotificationChannel(channel)
+        }
+
+        val notification = NotificationCompat.Builder(context, alertChannelId)
+            .setContentTitle(titulo)
+            .setContentText(mensaje)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        manager.notify(System.currentTimeMillis().toInt(), notification)
+    }
 }

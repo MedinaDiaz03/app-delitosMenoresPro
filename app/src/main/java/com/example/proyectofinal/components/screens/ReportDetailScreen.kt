@@ -94,6 +94,9 @@ fun ReportDetailScreen(navController: NavController, reporteId: String) {
                 onCambiarEstado = { nuevoEstado ->
                     repo.actualizarEstadoReporte(reporteId, nuevoEstado)
                     navController.popBackStack()
+                },
+                onValidarClick = {
+                    navController.navigate("validacion/${reporteId}")
                 }
             )
         }
@@ -108,7 +111,8 @@ fun DetalleContenido(
     padding: PaddingValues, 
     colores: ColorScheme,
     esPolicia: Boolean,
-    onCambiarEstado: (String) -> Unit
+    onCambiarEstado: (String) -> Unit,
+    onValidarClick: () -> Unit
 ) {
     val fecha = try {
         if (reporte.fecha != null)
@@ -266,6 +270,19 @@ fun DetalleContenido(
                 ) {
                     Text("Marcar como Falso ❌", color = Color.White, fontWeight = FontWeight.Bold)
                 }
+            }
+        } else {
+            // Botón para ciudadanos
+            HorizontalDivider(color = colores.outlineVariant.copy(alpha = 0.5f))
+            Button(
+                onClick = onValidarClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.LocationOn, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Validar / Reportar como Testigo", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }

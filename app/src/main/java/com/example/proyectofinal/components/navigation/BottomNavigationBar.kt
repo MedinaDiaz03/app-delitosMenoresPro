@@ -7,18 +7,28 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.proyectofinal.ui.theme.GreenPrimary
 
 @Composable
-fun BottomNavigationBar(navController: NavController) {
-    val items = listOf(
-        NavigationItem("home", "Inicio", Icons.Default.Map),
-        NavigationItem("report", "Reportar", Icons.Default.AddCircle),
-        NavigationItem("alerts", "Alertas", Icons.Default.Notifications),
-        NavigationItem("profile", "Perfil", Icons.Default.Person)
-    )
+fun BottomNavigationBar(navController: NavController, esPolicia: Boolean = false) {
+    val items = remember(esPolicia) {
+        val baseItems = mutableListOf(
+            NavigationItem("home", "Inicio", Icons.Default.Map)
+        )
+
+        // SOLO el ciudadano ve el botón de Reportar
+        if (!esPolicia) {
+            baseItems.add(NavigationItem("report", "Reportar", Icons.Default.AddCircle))
+        }
+
+        baseItems.add(NavigationItem("alerts", "Alertas", Icons.Default.Notifications))
+        baseItems.add(NavigationItem("profile", "Perfil", Icons.Default.Person))
+
+        baseItems
+    }
 
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,

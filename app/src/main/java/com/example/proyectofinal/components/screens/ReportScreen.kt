@@ -42,6 +42,7 @@ import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.repositorios.StorageRepositorio
+import com.example.proyectofinal.servicios.FCMHelper
 import com.example.proyectofinal.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -61,11 +62,28 @@ fun crearArchivoFotoTemporal(context: Context): Uri {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ReportScreen(navController: NavController) {
+    val authRepositorio = AutenticacionRepositorio()
+    val nav = navController
+    var autorizado by remember { mutableStateOf<Boolean?>(null) }
+
+    LaunchedEffect(Unit) {
+        val usuario = authRepositorio.obtenerDatosUsuarioActual()
+
+        if (usuario?.rol == "policia") {
+            nav.popBackStack()
+            autorizado = false
+        } else {
+            autorizado = true
+        }
+    }
+
+    if (autorizado != true) return
+
     val context = LocalContext.current
     val colores = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
     val reportRepositorio = remember { ReporteRepositorio() }
-    val authRepositorio = remember { AutenticacionRepositorio() }
+    val authRepositorioRemember = remember { AutenticacionRepositorio() }
     val locationRepositorio = remember { LocationRepositorio(context) }
     val storageRepositorio = remember { StorageRepositorio() }
 
@@ -295,6 +313,11 @@ fun ReportScreen(navController: NavController) {
                             val resultado = reportRepositorio.enviarReporte(nuevoReporte)
                             enviando = false
                             if (resultado.isSuccess) {
+                                FCMHelper.enviarNotificacionGlobal(
+                                    context,
+                                    "🔔 Nuevo Reporte: ${nuevoReporte.categoria.uppercase()}",
+                                    "Se ha reportado un incidente: ${nuevoReporte.descripcion.take(50)}..."
+                                )
                                 Toast.makeText(context, "Reporte enviado con éxito", Toast.LENGTH_SHORT).show()
                                 navController.popBackStack()
                             } else {

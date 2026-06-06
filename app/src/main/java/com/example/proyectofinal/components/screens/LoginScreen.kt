@@ -58,7 +58,7 @@ fun LoginScreen(navController: NavController) {
                 if (task.isSuccessful) {
                     repositorio.guardarUsuarioEnFirestore()
                     Toast.makeText(contexto, "Bienvenido: ${auth.currentUser?.displayName}", Toast.LENGTH_SHORT).show()
-                    navController.navigate("home") {
+                    navController.navigate("seleccion_rol") {
                         popUpTo("login") { inclusive = true }
                     }
                 } else {

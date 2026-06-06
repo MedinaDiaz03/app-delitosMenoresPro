@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.proyectofinal.components.navigation.BottomNavigationBar
 import com.example.proyectofinal.modelos.Reporte
+import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.ui.theme.GreenPrimary
 
@@ -27,8 +28,10 @@ import com.example.proyectofinal.ui.theme.GreenPrimary
 fun HistorialGlobalScreen(navController: NavController) {
 
     val repo = remember { ReporteRepositorio() }
+    val authRepo = remember { AutenticacionRepositorio() }
     var reportesOriginales by remember { mutableStateOf(listOf<Reporte>()) }
     var reportesFiltrados by remember { mutableStateOf(listOf<Reporte>()) }
+    var esPolicia by remember { mutableStateOf(false) }
 
     var categoriaSeleccionada by remember { mutableStateOf("Todas") }
     var horarioSeleccionado by remember { mutableStateOf("Todos") }
@@ -76,6 +79,9 @@ fun HistorialGlobalScreen(navController: NavController) {
     }
 
     LaunchedEffect(Unit) {
+        val usuario = authRepo.obtenerDatosUsuarioActual()
+        esPolicia = usuario?.rol == "policia"
+
         repo.obtenerTodosLosReportes {
             reportesOriginales = it
             reportesFiltrados = it
@@ -96,7 +102,7 @@ fun HistorialGlobalScreen(navController: NavController) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = colores.surface)
             )
         },
-        bottomBar = { BottomNavigationBar(navController) }
+        bottomBar = { BottomNavigationBar(navController, esPolicia = esPolicia) }
     ) { paddingValues ->
         Column(
             modifier = Modifier

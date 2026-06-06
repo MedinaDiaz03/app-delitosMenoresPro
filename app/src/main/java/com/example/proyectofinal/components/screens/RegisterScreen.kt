@@ -34,6 +34,7 @@ fun RegisterScreen(navController: NavController) {
     var confirmPassword by remember { mutableStateOf("") }
     var aceptoTerminos by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var codigoPolicia by remember { mutableStateOf("") }
 
     // Función para validar que solo sean letras (permite espacios)
     fun soloLetras(texto: String): Boolean {
@@ -92,6 +93,16 @@ fun RegisterScreen(navController: NavController) {
                 label = "Correo electrónico",
                 placeholder = "nombre@gmail.com",
                 leadingIcon = Icons.Default.Email
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            PrimaryInputField(
+                value = codigoPolicia,
+                onValueChange = { codigoPolicia = it },
+                label = "Código de oficial (opcional)",
+                placeholder = "Solo si eres policía",
+                leadingIcon = Icons.Default.Security
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -157,11 +168,20 @@ fun RegisterScreen(navController: NavController) {
                         }
 
                         isLoading = true
+
+                        val esCodigoValido = codigoPolicia == "POLICIA123"
+
+                        if (codigoPolicia.isNotBlank() && !esCodigoValido) {
+                            Toast.makeText(context, "Código de policía incorrecto", Toast.LENGTH_SHORT).show()
+                            isLoading = false
+                            return@PrimaryButton
+                        }
+
                         val nuevoUsuario = Usuario(
                             nombre = nombreCompleto,
                             email = correo,
-                            rol = "ciudadano",
-                            verificado = false
+                            rol = if (esCodigoValido) "policia" else "ciudadano",
+                            verificado = esCodigoValido
                         )
 
                         scope.launch {

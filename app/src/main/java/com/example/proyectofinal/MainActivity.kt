@@ -12,12 +12,15 @@ import androidx.navigation.compose.rememberNavController
 import com.example.proyectofinal.components.screens.AlertsScreen
 import com.example.proyectofinal.components.screens.HistorialScreens.HistorialRepoScreen
 import com.example.proyectofinal.components.screens.HistorialGlobalScreen
-import com.example.proyectofinal.components.screens.HomeScreen
+import com.example.proyectofinal.components.screens.HomeCiudadanoScreen
+import com.example.proyectofinal.components.screens.HomePoliciaScreen
+import com.example.proyectofinal.components.screens.HomeRouterScreen
 import com.example.proyectofinal.components.screens.LoginScreen
 import com.example.proyectofinal.components.screens.ProfileScreen
 import com.example.proyectofinal.components.screens.RegisterScreen
 import com.example.proyectofinal.components.screens.ReportScreen
 import com.example.proyectofinal.components.screens.ReportDetailScreen
+import com.example.proyectofinal.components.screens.SeleccionRolScreen
 import com.example.proyectofinal.components.screens.ValidacionEmergenciaScreen
 import com.example.proyectofinal.helpers.RolHelper
 import com.example.proyectofinal.ui.theme.ProyectoFinalTheme
@@ -38,10 +41,11 @@ class MainActivity : ComponentActivity() {
                         //Se nombra las rutas existentes y asignando direcciones a cada ruta
                         composable("login")         { LoginScreen(navController) }
                         composable("register")      { RegisterScreen(navController) }
-                        composable("home")          { HomeScreen(navController) }
+                        composable("home")          { HomeRouterScreen(navController) }
                         composable("report")        { ReportScreen(navController) }
                         composable("alerts")        { AlertsScreen(navController) }
                         composable("profile")       { ProfileScreen(navController) }
+                        composable("seleccion_rol") { SeleccionRolScreen(navController) }
                         composable("historial_repo") { HistorialRepoScreen(navController) }
                         composable("historial_global") { HistorialGlobalScreen(navController) }
 
@@ -54,14 +58,14 @@ class MainActivity : ComponentActivity() {
                             val reporteId = backStackEntry.arguments?.getString("reporteId") ?: ""
                             val rolHelper = RolHelper()
                             ValidacionEmergenciaScreen(
+                                navController = navController,
                                 rolHelper = rolHelper,
                                 reporteId = reporteId,
                                 onValidarComoPolicia = { id ->
-                                    // TODO: conectar con la lógica real cuando exista el ViewModel
-                                    android.widget.Toast.makeText(this@MainActivity, "Validando reporte $id como policía", Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(this@MainActivity, "Reporte $id validado por policía", Toast.LENGTH_SHORT).show()
                                 },
                                 onSolicitarValidacion = { id ->
-                                    android.widget.Toast.makeText(this@MainActivity, "Solicitando validación para $id", Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(this@MainActivity, "Testimonio registrado para $id", Toast.LENGTH_SHORT).show()
                                 }
                             )
                         }

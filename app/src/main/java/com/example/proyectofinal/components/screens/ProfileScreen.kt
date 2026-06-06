@@ -29,7 +29,6 @@ import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.ui.theme.GreenPrimary
 import coil.compose.AsyncImage
-import com.example.proyectofinal.helpers.RolHelper
 import com.google.firebase.auth.FirebaseAuth
 
 // ─── PANTALLA DE PERFIL ────────────────────────────────────────────────────────
@@ -73,7 +72,7 @@ fun ProfileScreen(navController: NavController) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        bottomBar = { BottomNavigationBar(navController) }
+        bottomBar = { BottomNavigationBar(navController, esPolicia = usuario?.rol == "policia") }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -87,70 +86,40 @@ fun ProfileScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // ── ESTADÍSTICAS ──
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Estadísticas", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    EstadisticaChip(
-                        modifier = Modifier.weight(1f),
-                        valor = totalReportes.toString(),
-                        etiqueta = "Reportes",
-                        icono = Icons.Default.Campaign,
-                        color = GreenPrimary
-                    )
-                    EstadisticaChip(
-                        modifier = Modifier.weight(1f),
-                        valor = (0).toString(), // TODO: Adaptar si se agregan estos campos al nuevo modelo
-                        etiqueta = "Validados",
-                        icono = Icons.Default.Verified,
-                        color = Color(0xFF3B82F6)
-                    )
-                    EstadisticaChip(
-                        modifier = Modifier.weight(1f),
-                        valor = nivelDeConfianza(0),
-                        etiqueta = "Nivel",
-                        icono = Icons.Default.Star,
-                        color = Color(0xFFF59E0B)
-                    )
-                }
-
-                // Barra de progreso de nivel
-                NivelDeConfianzaCard(puntos = 0)
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── VERIFICACIÓN OFICIAL ──
+            // ── ESTADÍSTICAS (SOLO CIUDADANO) ──
             if (usuario?.rol != "policia") {
                 Column(
                     modifier = Modifier.padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Validación de Personal", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    var codigoInput by remember { mutableStateOf("") }
-                    val rolHelper = remember { RolHelper() }
+                    Text("Estadísticas", fontWeight = FontWeight.Bold, fontSize = 18.sp)
 
-                    OutlinedTextField(
-                        value = codigoInput,
-                        onValueChange = { codigoInput = it },
-                        label = { Text("Código de Oficial") },
-                        placeholder = { Text("Ingresa el código secreto") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        trailingIcon = {
-                            IconButton(onClick = { rolHelper.validarCodigoPolicia(context, codigoInput) }) {
-                                Icon(Icons.Default.VerifiedUser, null, tint = GreenPrimary)
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GreenPrimary,
-                            focusedLabelColor = GreenPrimary
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        EstadisticaChip(
+                            modifier = Modifier.weight(1f),
+                            valor = totalReportes.toString(),
+                            etiqueta = "Reportes",
+                            icono = Icons.Default.Campaign,
+                            color = GreenPrimary
                         )
-                    )
+                        EstadisticaChip(
+                            modifier = Modifier.weight(1f),
+                            valor = (0).toString(), // TODO: Adaptar si se agregan estos campos al nuevo modelo
+                            etiqueta = "Validados",
+                            icono = Icons.Default.Verified,
+                            color = Color(0xFF3B82F6)
+                        )
+                        EstadisticaChip(
+                            modifier = Modifier.weight(1f),
+                            valor = nivelDeConfianza(0),
+                            etiqueta = "Nivel",
+                            icono = Icons.Default.Star,
+                            color = Color(0xFFF59E0B)
+                        )
+                    }
+
+                    // Barra de progreso de nivel
+                    NivelDeConfianzaCard(puntos = 0)
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
@@ -162,12 +131,14 @@ fun ProfileScreen(navController: NavController) {
             ) {
                 Text("Mi cuenta", fontWeight = FontWeight.Bold, fontSize = 18.sp)
 
-                OpcionMenu(
-                    icono = Icons.Default.History,
-                    titulo = "Historial de reportes",
-                    subtitulo = "Ver todos tus reportes enviados",
-                    onClick = { navController.navigate("historial_repo") }
-                )
+                if (usuario?.rol != "policia") {
+                    OpcionMenu(
+                        icono = Icons.Default.History,
+                        titulo = "Historial de reportes",
+                        subtitulo = "Ver todos tus reportes enviados",
+                        onClick = { navController.navigate("historial_repo") }
+                    )
+                }
                 OpcionMenu(
                     icono = Icons.Default.Public,
                     titulo = "Historial Global 🌍",

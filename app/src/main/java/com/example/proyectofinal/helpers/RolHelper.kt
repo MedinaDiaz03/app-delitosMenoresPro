@@ -10,23 +10,58 @@ class RolHelper {
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
 
-    fun validarCodigoPolicia(context: Context, codigo: String) {
+    fun setRolCiudadano(context: Context, onComplete: () -> Unit) {
+        val user = auth.currentUser ?: return
+
+        db.collection("usuarios")
+            .document(user.uid)
+            .update("rol", "ciudadano")
+            .addOnSuccessListener {
+                onComplete()
+            }
+            .addOnFailureListener {
+                // Si el documento no existe (primer login Google), lo creamos
+                val nuevoUsuario = mapOf(
+                    "uid" to user.uid,
+                    "nombre" to (user.displayName ?: "Usuario Google"),
+                    "email" to (user.email ?: ""),
+                    "rol" to "ciudadano"
+                )
+                db.collection("usuarios").document(user.uid).set(nuevoUsuario)
+                    .addOnSuccessListener { onComplete() }
+            }
+    }
+
+    fun validarCodigoPolicia(context: Context, codigo: String, onComplete: () -> Unit = {}) {
         val user = auth.currentUser ?: return
 
         if (codigo == "POLICIA123") {
-
+            val updates = mapOf(
+                "rol" to "policia",
+                "verificado" to true
+            )
             db.collection("usuarios")
                 .document(user.uid)
-                .update(
-                    mapOf(
+                .update(updates)
+                .addOnSuccessListener {
+                    Toast.makeText(context, "Ahora eres policía ✅", Toast.LENGTH_SHORT).show()
+                    onComplete()
+                }
+                .addOnFailureListener {
+                    // Similar al ciudadano, si no existe lo creamos
+                    val nuevoUsuario = mapOf(
+                        "uid" to user.uid,
+                        "nombre" to (user.displayName ?: "Usuario Google"),
+                        "email" to (user.email ?: ""),
                         "rol" to "policia",
                         "verificado" to true
                     )
-                )
-                .addOnSuccessListener {
-                    Toast.makeText(context, "Ahora eres policía ✅", Toast.LENGTH_SHORT).show()
+                    db.collection("usuarios").document(user.uid).set(nuevoUsuario)
+                        .addOnSuccessListener {
+                            Toast.makeText(context, "Ahora eres policía ✅", Toast.LENGTH_SHORT).show()
+                            onComplete()
+                        }
                 }
-
         } else {
             Toast.makeText(context, "Código incorrecto ❌", Toast.LENGTH_SHORT).show()
         }

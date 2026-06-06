@@ -84,4 +84,6 @@ dependencies {
     implementation(libs.play.services.maps)
 
     implementation("com.cloudinary:cloudinary-android:2.8.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("com.google.firebase:firebase-messaging")
 }
