@@ -25,7 +25,7 @@ import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
-import com.example.proyectofinal.ui.theme.GreenPrimary
+
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -53,6 +53,7 @@ fun HomePoliciaScreen(navController: NavController) {
     var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
     var mapaOscuro by remember { mutableStateOf(false) }
     var marcadoresVisibles by remember { mutableStateOf(true) }
+    var userLocation by remember { mutableStateOf<LatLng?>(null) }
 
     // Animación de parpadeo para los reportes
     LaunchedEffect(Unit) {
@@ -83,11 +84,9 @@ fun HomePoliciaScreen(navController: NavController) {
         if (locationPermission.status.isGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
             if (ubicacion != null) {
+                userLocation = LatLng(ubicacion.latitude, ubicacion.longitude)
                 camaraState.animate(
-                    CameraUpdateFactory.newLatLngZoom(
-                        LatLng(ubicacion.latitude, ubicacion.longitude),
-                        15f
-                    )
+                    CameraUpdateFactory.newLatLngZoom(userLocation!!, 15f)
                 )
             }
         }
@@ -117,16 +116,16 @@ fun HomePoliciaScreen(navController: NavController) {
         gesturesEnabled = false,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = colores.surface,
+                drawerContainerColor = Color.White,
                 modifier = Modifier.width(300.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(220.dp)
                         .background(
                             Brush.verticalGradient(
-                                listOf(GreenPrimary, GreenPrimary.copy(alpha = 0.8f))
+                                listOf(Color(0xFF1E3A8A), Color(0xFF2563EB))
                             )
                         )
                         .padding(24.dp),
@@ -144,12 +143,13 @@ fun HomePoliciaScreen(navController: NavController) {
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
+                                .background(Color.White.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.Default.Person,
                                 null,
-                                modifier = Modifier.fillMaxSize().padding(12.dp),
+                                modifier = Modifier.size(36.dp),
                                 tint = Color.White
                             )
                         }
@@ -165,10 +165,30 @@ fun HomePoliciaScreen(navController: NavController) {
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 12.sp
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            color = Color.White.copy(alpha = 0.2f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+                        ) {
+                            Text(
+                                "Oficial Verificado",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "ACTIVIDAD",
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF2563EB).copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Bold
+                )
 
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.History, null) },
@@ -180,14 +200,14 @@ fun HomePoliciaScreen(navController: NavController) {
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedIconColor = GreenPrimary,
-                        unselectedTextColor = colores.onSurface
+                        unselectedIconColor = Color(0xFF2563EB),
+                        unselectedTextColor = Color(0xFF1E3A8A)
                     )
                 )
 
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Public, null) },
-                    label = { Text("Historial Global 🌍") },
+                    label = { Text("Historial Global") },
                     selected = false,
                     onClick = {
                         scope.launch { drawerState.close() }
@@ -195,9 +215,19 @@ fun HomePoliciaScreen(navController: NavController) {
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedIconColor = GreenPrimary,
-                        unselectedTextColor = colores.onSurface
+                        unselectedIconColor = Color(0xFF2563EB),
+                        unselectedTextColor = Color(0xFF1E3A8A)
                     )
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "MI CUENTA",
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF2563EB).copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Bold
                 )
 
                 NavigationDrawerItem(
@@ -210,8 +240,8 @@ fun HomePoliciaScreen(navController: NavController) {
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedIconColor = GreenPrimary,
-                        unselectedTextColor = colores.onSurface
+                        unselectedIconColor = Color(0xFF2563EB),
+                        unselectedTextColor = Color(0xFF1E3A8A)
                     )
                 )
 
@@ -242,34 +272,36 @@ fun HomePoliciaScreen(navController: NavController) {
             topBar = {
                 TopAppBar(
                     title = {
-                        Text("SafetyConnect", color = GreenPrimary, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Shield, null, tint = colores.primary, modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("SafetyConnect", color = colores.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        }
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = GreenPrimary)
+                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = colores.primary)
                         }
                     },
                     actions = {
-                        IconButton(onClick = { }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search", tint = GreenPrimary)
-                        }
                         IconButton(onClick = { navController.navigate("profile") }) {
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(colores.secondaryContainer)
+                                    .background(colores.primary.copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.Person,
                                     null,
-                                    tint = colores.onSecondaryContainer,
-                                    modifier = Modifier.padding(4.dp)
+                                    tint = colores.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colores.surface)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
                 )
             },
             bottomBar = { BottomNavigationBar(navController = navController, esPolicia = true) }
@@ -286,7 +318,8 @@ fun HomePoliciaScreen(navController: NavController) {
                     mapaOscuro = mapaOscuro,
                     esPolicia = true,
                     marcadoresVisibles = marcadoresVisibles,
-                    navController = navController
+                    navController = navController,
+                    userLocation = userLocation
                 )
 
                 Column(

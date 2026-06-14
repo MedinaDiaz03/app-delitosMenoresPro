@@ -2,6 +2,7 @@ package com.example.proyectofinal.components.auth
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,14 +21,17 @@ fun TermsCheckbox(
     ) {
         Checkbox(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = onCheckedChange,
+            colors = CheckboxDefaults.colors(
+                checkedColor = MaterialTheme.colorScheme.primary,
+                uncheckedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            )
         )
-
         Spacer(modifier = Modifier.width(8.dp))
-
         Text(
             text = "Acepto los Términos y Condiciones y la Política de Privacidad",
-            style = MaterialTheme.typography.bodySmall
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }

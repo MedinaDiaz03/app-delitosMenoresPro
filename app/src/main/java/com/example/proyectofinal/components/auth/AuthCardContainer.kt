@@ -18,19 +18,13 @@ fun AuthCardContainer(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-
-        shape = RoundedCornerShape(
-            topStart = 0.dp,
-            topEnd = 0.dp,
-            bottomStart = 16.dp,
-            bottomEnd = 16.dp
-        ),
-        tonalElevation = 4.dp,
-        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 2.dp,
+        shadowElevation = 6.dp,
         color = MaterialTheme.colorScheme.surface
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(24.dp),
             content = content
         )
     }

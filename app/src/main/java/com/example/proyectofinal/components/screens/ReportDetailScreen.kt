@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,68 +30,77 @@ import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
-import com.example.proyectofinal.ui.theme.GreenPrimary
+import com.example.proyectofinal.servicios.GeocodingService
+import com.google.android.gms.maps.model.LatLng
 import java.text.SimpleDateFormat
 import java.util.Locale
-
-// ─── PANTALLA DE DETALLE ───────────────────────────────────────────────────────
-// Recibe el ID del reporte por navegación y lo carga desde Firestore.
-// Así evitamos el crash de pasar objetos por savedStateHandle.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportDetailScreen(navController: NavController, reporteId: String) {
+    val context = LocalContext.current
     val authRepo = remember { AutenticacionRepositorio() }
     val repo = remember { ReporteRepositorio() }
     var reporte by remember { mutableStateOf<Reporte?>(null) }
     var usuarioActual by remember { mutableStateOf<Usuario?>(null) }
     var cargando by remember { mutableStateOf(true) }
-    val colores = MaterialTheme.colorScheme
+    var direccionResuelta by remember { mutableStateOf<String?>(null) }
 
-    // Carga el reporte por ID y los datos del usuario actual
     LaunchedEffect(reporteId) {
         usuarioActual = authRepo.obtenerDatosUsuarioActual()
         reporte = repo.obtenerReportePorId(reporteId)
+        // Geocodificar si el reporte no tiene dirección guardada
+        val r = reporte
+        if (r != null && r.direccion.isNullOrEmpty() && (r.latitud != 0.0 || r.longitud != 0.0)) {
+            direccionResuelta = GeocodingService.getAddressFromLatLng(
+                context, LatLng(r.latitud, r.longitud)
+            )
+        }
         cargando = false
     }
 
     Scaffold(
-        containerColor = colores.background,
+        containerColor = Color(0xFFF8FAFC),
         topBar = {
             TopAppBar(
-                title = { Text("Detalle del Reporte", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "Detalle del reporte",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF1E293B)
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = GreenPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colores.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF8FAFC))
             )
         }
     ) { padding ->
         when {
-            // Cargando
             cargando -> Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = GreenPrimary)
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
 
-            // No se encontró el reporte
             reporte == null -> Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No se pudo cargar el reporte.", color = colores.onSurfaceVariant)
+                Text("No se pudo cargar el reporte.", color = Color(0xFF475569))
             }
 
-            // Mostrar detalle
             else -> DetalleContenido(
-                reporte = reporte!!, 
-                padding = padding, 
-                colores = colores,
+                reporte = reporte!!,
+                padding = padding,
+                colores = MaterialTheme.colorScheme,
                 esPolicia = usuarioActual?.rol == "policia",
+                esPropio = usuarioActual?.uid == reporte!!.usuarioId,
+                direccionResuelta = direccionResuelta,
                 onCambiarEstado = { nuevoEstado ->
                     repo.actualizarEstadoReporte(reporteId, nuevoEstado)
                     navController.popBackStack()
@@ -103,14 +113,14 @@ fun ReportDetailScreen(navController: NavController, reporteId: String) {
     }
 }
 
-// ─── CONTENIDO DEL DETALLE ────────────────────────────────────────────────────
-
 @Composable
 fun DetalleContenido(
-    reporte: Reporte, 
-    padding: PaddingValues, 
+    reporte: Reporte,
+    padding: PaddingValues,
     colores: ColorScheme,
     esPolicia: Boolean,
+    esPropio: Boolean = false,
+    direccionResuelta: String? = null,
     onCambiarEstado: (String) -> Unit,
     onValidarClick: () -> Unit
 ) {
@@ -130,12 +140,13 @@ fun DetalleContenido(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+
         // ── FOTO DE EVIDENCIA ──
         if (tieneImagen) {
             Card(
-                modifier = Modifier.fillMaxWidth().height(260.dp),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                modifier = Modifier.fillMaxWidth().height(240.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Image(
                     painter = rememberAsyncImagePainter(reporte.fotoUrl),
@@ -148,32 +159,33 @@ fun DetalleContenido(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(100.dp)
-                    .background(colores.surfaceVariant, RoundedCornerShape(20.dp)),
+                    .height(80.dp)
+                    .background(Color(0xFFF1F5F9), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Sin evidencia fotográfica", color = colores.onSurfaceVariant, fontSize = 14.sp)
+                Text("Sin evidencia fotográfica", color = Color(0xFF64748B), fontSize = 14.sp)
             }
         }
 
         // ── CATEGORÍA Y FECHA ──
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 reporte.categoria.uppercase(),
-                fontSize = 26.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = GreenPrimary
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(Icons.Default.CalendarMonth, null, tint = colores.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                Text(fecha, fontSize = 13.sp, color = colores.onSurfaceVariant)
+                Icon(Icons.Default.CalendarMonth, null, tint = Color(0xFF64748B), modifier = Modifier.size(15.dp))
+                Text(fecha, fontSize = 13.sp, color = Color(0xFF64748B))
             }
         }
 
-        HorizontalDivider(color = colores.outlineVariant.copy(alpha = 0.5f))
+        HorizontalDivider(color = Color(0xFFE2E8F0))
 
         // ── QUIÉN REPORTÓ ──
         Row(
@@ -181,17 +193,18 @@ fun DetalleContenido(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
-                modifier = Modifier.size(36.dp).background(colores.surfaceVariant, CircleShape),
+                modifier = Modifier.size(36.dp).background(Color(0xFFF1F5F9), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Person, null, tint = GreenPrimary, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
             }
             Column {
-                Text("Reportado por", fontSize = 11.sp, color = colores.onSurfaceVariant)
+                Text("Reportado por", fontSize = 11.sp, color = Color(0xFF64748B))
                 Text(
                     reporte.usuarioNombre.ifEmpty { "Vecino de la comunidad" },
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1E293B)
                 )
             }
         }
@@ -202,88 +215,123 @@ fun DetalleContenido(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Box(
-                modifier = Modifier.size(36.dp).background(colores.surfaceVariant, CircleShape),
+                modifier = Modifier.size(36.dp).background(Color(0xFFF1F5F9), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.LocationOn, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(18.dp))
             }
             Column {
-                Text("Ubicación del suceso", fontSize = 11.sp, color = colores.onSurfaceVariant)
+                Text("Ubicación del suceso", fontSize = 11.sp, color = Color(0xFF64748B))
+                val textoUbicacion = when {
+                    !reporte.direccion.isNullOrEmpty() -> reporte.direccion!!
+                    !direccionResuelta.isNullOrEmpty() -> direccionResuelta!!
+                    reporte.latitud != 0.0 || reporte.longitud != 0.0 ->
+                        "Obteniendo dirección..."
+                    else -> "Ubicación no disponible"
+                }
                 Text(
-                    "Lat: ${reporte.latitud}  •  Long: ${reporte.longitud}",
+                    textoUbicacion,
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF1E293B)
                 )
             }
         }
 
-        HorizontalDivider(color = colores.outlineVariant.copy(alpha = 0.5f))
+        HorizontalDivider(color = Color(0xFFE2E8F0))
 
         // ── DESCRIPCIÓN ──
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Detalle de los hechos", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(
+                "Detalle de los hechos",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = Color(0xFF1E293B)
+            )
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = colores.surface),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
                 shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, colores.outlineVariant.copy(alpha = 0.5f))
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Text(
                     text = reporte.descripcion.ifEmpty { "El usuario no añadió descripción." },
                     modifier = Modifier.padding(16.dp),
                     fontSize = 14.sp,
                     lineHeight = 22.sp,
-                    color = colores.onSurface
+                    color = Color(0xFF334155)
                 )
             }
         }
 
-        // ── GESTIÓN DE ESTADO (SOLO POLICÍA) ──
+        // ── ACCIONES ──
+        HorizontalDivider(color = Color(0xFFE2E8F0))
+
         if (esPolicia) {
-            HorizontalDivider(color = colores.outlineVariant.copy(alpha = 0.5f))
-            Text("Gestión de Reporte", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                "Gestión del reporte",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = Color(0xFF1E293B)
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(
                     onClick = { onCambiarEstado("en_proceso") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA000)),
-                    shape = RoundedCornerShape(12.dp)
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                 ) {
-                    Text("Marcar en Proceso ⚠", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Marcar en proceso", color = Color.White, fontWeight = FontWeight.Bold)
                 }
-
                 Button(
                     onClick = { onCambiarEstado("resuelto") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
-                    shape = RoundedCornerShape(12.dp)
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                 ) {
-                    Text("Marcar como Resuelto ✅", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Marcar como resuelto", color = Color.White, fontWeight = FontWeight.Bold)
                 }
-
-                Button(
+                OutlinedButton(
                     onClick = { onCambiarEstado("falso") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE04F5F)),
-                    shape = RoundedCornerShape(12.dp)
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE04F5F)),
+                    border = BorderStroke(1.dp, Color(0xFFE04F5F))
                 ) {
-                    Text("Marcar como Falso ❌", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Marcar como falso", fontWeight = FontWeight.Bold)
                 }
             }
-        } else {
-            // Botón para ciudadanos
-            HorizontalDivider(color = colores.outlineVariant.copy(alpha = 0.5f))
+        } else if (!esPropio) {
             Button(
                 onClick = onValidarClick,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                shape = RoundedCornerShape(12.dp)
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                shape = RoundedCornerShape(12.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
             ) {
                 Icon(Icons.Default.LocationOn, null, tint = Color.White, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Validar / Reportar como Testigo", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Calificar reporte", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFFF1F5F9),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    "Este es tu reporte — no puedes validarlo",
+                    modifier = Modifier.padding(14.dp),
+                    color = Color(0xFF3B82F6),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }

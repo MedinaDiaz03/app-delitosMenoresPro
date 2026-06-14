@@ -1,5 +1,6 @@
 package com.example.proyectofinal.components.screens
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -24,9 +25,9 @@ import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
-import com.example.proyectofinal.repositorios.LocationShareRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
-import com.example.proyectofinal.ui.theme.GreenPrimary
+import com.example.proyectofinal.servicios.NotificationHelper
+
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -65,17 +66,21 @@ fun HomeCiudadanoScreen(navController: NavController) {
     val authRepositorio = remember { AutenticacionRepositorio() }
     val reporteRepositorio = remember { ReporteRepositorio() }
     val locationRepositorio = remember { LocationRepositorio(context) }
-    val shareRepo = remember { LocationShareRepositorio() }
 
     var usuario by remember { mutableStateOf<Usuario?>(null) }
     var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
     var mapaOscuro by remember { mutableStateOf(false) }
-    var compartiendoUbicacion by remember { mutableStateOf(false) }
+    var userLocation by remember { mutableStateOf<LatLng?>(null) }
 
-    // Estado para validación de proximidad
+    val prefs = context.getSharedPreferences("ignored_reports", Context.MODE_PRIVATE)
+    val idsIgnorados = remember {
+        prefs.getStringSet("ids", emptySet())?.toMutableSet() ?: mutableSetOf()
+    }
+
     var mostrarDialogoProximidad by remember { mutableStateOf(false) }
     var reporteCercano by remember { mutableStateOf<Reporte?>(null) }
-    var ultimoIdMostrado by remember { mutableStateOf<String?>(null) }
+    val idsNotificados = remember { mutableSetOf<String>() }
+    val appStartTime = remember { System.currentTimeMillis() }
 
     val locationPermission = rememberPermissionState(
         android.Manifest.permission.ACCESS_FINE_LOCATION
@@ -93,29 +98,46 @@ fun HomeCiudadanoScreen(navController: NavController) {
             locationPermission.launchPermissionRequest()
         }
 
-        // Loop de detección de proximidad
+        // Loop de detección de proximidad (40m) y notificaciones (500m)
         while (true) {
             if (locationPermission.status.isGranted) {
                 val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
                 if (ubicacionActual != null) {
+                    // Modal si hay incidente a menos de 50 metros, de otro usuario y no ignorado
                     val cercano = reportes.find { repo ->
-                        repo.id != ultimoIdMostrado &&
+                        repo.id !in idsIgnorados &&
+                        repo.usuarioId != usuario?.uid &&
                         calcularDistancia(
-                            ubicacionActual.latitude,
-                            ubicacionActual.longitude,
-                            repo.latitud,
-                            repo.longitud
-                        ) < 150.0 // 150 metros
+                            ubicacionActual.latitude, ubicacionActual.longitude,
+                            repo.latitud, repo.longitud
+                        ) < 50.0
                     }
-
                     if (cercano != null) {
                         reporteCercano = cercano
                         mostrarDialogoProximidad = true
-                        ultimoIdMostrado = cercano.id
+                        idsIgnorados.add(cercano.id)
+                        prefs.edit().putStringSet("ids", idsIgnorados.toSet()).apply()
+                    }
+
+                    // Notificación sistema para reportes nuevos dentro de 500m
+                    reportes.filter { repo ->
+                        repo.id !in idsNotificados &&
+                        (repo.fecha?.toDate()?.time ?: 0L) > appStartTime &&
+                        calcularDistancia(
+                            ubicacionActual.latitude, ubicacionActual.longitude,
+                            repo.latitud, repo.longitud
+                        ) < 500.0
+                    }.forEach { repo ->
+                        idsNotificados.add(repo.id)
+                        NotificationHelper.mostrarNotificacion(
+                            context,
+                            "Incidente cercano: ${repo.categoria.uppercase()}",
+                            repo.descripcion.ifEmpty { "Nuevo reporte en tu zona" }
+                        )
                     }
                 }
             }
-            delay(10000) // Verificar cada 10 segundos
+            delay(30000)
         }
     }
 
@@ -123,29 +145,8 @@ fun HomeCiudadanoScreen(navController: NavController) {
         if (locationPermission.status.isGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
             if (ubicacion != null) {
-                camaraState.animate(
-                    CameraUpdateFactory.newLatLngZoom(
-                        LatLng(ubicacion.latitude, ubicacion.longitude),
-                        15f
-                    )
-                )
-            }
-        }
-    }
-
-    LaunchedEffect(compartiendoUbicacion) {
-        if (compartiendoUbicacion) {
-            val user = authRepositorio.obtenerDatosUsuarioActual()
-            if (user != null) {
-                repeat(120) { // ~4 minutos
-                    val loc = locationRepositorio.obtenerUbicacionActual()
-                    if (loc != null) {
-                        shareRepo.actualizarUbicacion(user.uid, loc.latitude, loc.longitude)
-                    }
-                    delay(2000)
-                }
-                shareRepo.detener(user.uid)
-                compartiendoUbicacion = false
+                userLocation = LatLng(ubicacion.latitude, ubicacion.longitude)
+                camaraState.animate(CameraUpdateFactory.newLatLngZoom(userLocation!!, 15f))
             }
         }
     }
@@ -174,16 +175,16 @@ fun HomeCiudadanoScreen(navController: NavController) {
         gesturesEnabled = false,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = colores.surface,
+                drawerContainerColor = Color.White,
                 modifier = Modifier.width(300.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(220.dp)
                         .background(
                             Brush.verticalGradient(
-                                listOf(GreenPrimary, GreenPrimary.copy(alpha = 0.8f))
+                                listOf(Color(0xFF1E3A8A), Color(0xFF2563EB))
                             )
                         )
                         .padding(24.dp),
@@ -201,12 +202,13 @@ fun HomeCiudadanoScreen(navController: NavController) {
                             modifier = Modifier
                                 .size(64.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
+                                .background(Color.White.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 Icons.Default.Person,
                                 null,
-                                modifier = Modifier.fillMaxSize().padding(12.dp),
+                                modifier = Modifier.size(36.dp),
                                 tint = Color.White
                             )
                         }
@@ -225,7 +227,15 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "ACTIVIDAD",
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF2563EB).copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Bold
+                )
 
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.History, null) },
@@ -237,14 +247,14 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedIconColor = GreenPrimary,
-                        unselectedTextColor = colores.onSurface
+                        unselectedIconColor = Color(0xFF2563EB),
+                        unselectedTextColor = Color(0xFF1E3A8A)
                     )
                 )
 
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Public, null) },
-                    label = { Text("Historial Global 🌍") },
+                    label = { Text("Historial Global") },
                     selected = false,
                     onClick = {
                         scope.launch { drawerState.close() }
@@ -252,9 +262,19 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedIconColor = GreenPrimary,
-                        unselectedTextColor = colores.onSurface
+                        unselectedIconColor = Color(0xFF2563EB),
+                        unselectedTextColor = Color(0xFF1E3A8A)
                     )
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "MI CUENTA",
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF2563EB).copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Bold
                 )
 
                 NavigationDrawerItem(
@@ -267,8 +287,8 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
-                        unselectedIconColor = GreenPrimary,
-                        unselectedTextColor = colores.onSurface
+                        unselectedIconColor = Color(0xFF2563EB),
+                        unselectedTextColor = Color(0xFF1E3A8A)
                     )
                 )
 
@@ -299,34 +319,36 @@ fun HomeCiudadanoScreen(navController: NavController) {
             topBar = {
                 TopAppBar(
                     title = {
-                        Text("SafetyConnect", color = GreenPrimary, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Shield, null, tint = colores.primary, modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("SafetyConnect", color = colores.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        }
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = GreenPrimary)
+                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = colores.primary)
                         }
                     },
                     actions = {
-                        IconButton(onClick = { }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search", tint = GreenPrimary)
-                        }
                         IconButton(onClick = { navController.navigate("profile") }) {
                             Box(
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(colores.secondaryContainer)
+                                    .background(colores.primary.copy(alpha = 0.1f)),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.Person,
                                     null,
-                                    tint = colores.onSecondaryContainer,
-                                    modifier = Modifier.padding(4.dp)
+                                    tint = colores.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colores.surface)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
                 )
             },
             bottomBar = { BottomNavigationBar(navController = navController) }
@@ -343,18 +365,9 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     mapaOscuro = mapaOscuro,
                     esPolicia = false,
                     marcadoresVisibles = true,
-                    navController = navController
+                    navController = navController,
+                    userLocation = userLocation
                 )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    SecurityStatusCard()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    FilterChipsRow()
-                }
 
                 Column(
                     modifier = Modifier
@@ -362,21 +375,6 @@ fun HomeCiudadanoScreen(navController: NavController) {
                         .padding(end = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    MapActionButton(
-                        icon = if (compartiendoUbicacion) Icons.Default.GpsFixed else Icons.Default.GpsOff,
-                        onClick = {
-                            if (!locationPermission.status.isGranted) {
-                                locationPermission.launchPermissionRequest()
-                            } else {
-                                compartiendoUbicacion = !compartiendoUbicacion
-                                if (!compartiendoUbicacion) {
-                                    scope.launch {
-                                        usuario?.let { shareRepo.detener(it.uid) }
-                                    }
-                                }
-                            }
-                        }
-                    )
                     MapActionButton(
                         icon = if (mapaOscuro) Icons.Default.LightMode else Icons.Default.DarkMode,
                         onClick = { mapaOscuro = !mapaOscuro }
@@ -389,40 +387,32 @@ fun HomeCiudadanoScreen(navController: NavController) {
 
                 BotonSOS(modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp))
 
-                // Diálogo de Validación de Proximidad
+                // Modal de incidente activo a 50 metros (solo reportes de otros usuarios)
                 if (mostrarDialogoProximidad && reporteCercano != null) {
                     AlertDialog(
                         onDismissRequest = { mostrarDialogoProximidad = false },
-                        icon = { Icon(Icons.Default.Help, contentDescription = null, tint = GreenPrimary) },
-                        title = { Text("¿Incidente activo?") },
-                        text = { 
-                            Text("Estás cerca de un reporte de '${reporteCercano?.categoria?.uppercase()}'. ¿Sigue ocurriendo este incidente?") 
+                        icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE04F5F)) },
+                        title = { Text("Incidente activo cerca", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Text("Hay un reporte de '${reporteCercano?.categoria?.uppercase()}' a menos de 40 metros de tu ubicación. ¿Deseas verlo?")
                         },
                         confirmButton = {
                             Button(
                                 onClick = {
-                                    scope.launch {
-                                        reporteCercano?.id?.let { reporteRepositorio.confirmarReporte(it) }
-                                        mostrarDialogoProximidad = false
-                                        Toast.makeText(context, "Gracias por confirmar", Toast.LENGTH_SHORT).show()
-                                    }
+                                    val id = reporteCercano?.id
+                                    mostrarDialogoProximidad = false
+                                    if (id != null) navController.navigate("report_detail/$id")
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary)
+                                colors = ButtonDefaults.buttonColors(containerColor = colores.primary)
                             ) {
-                                Text("Sí, es real")
+                                Text("Ver ahora")
                             }
                         },
                         dismissButton = {
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        reporteCercano?.id?.let { reporteRepositorio.desmentirReporte(it) }
-                                        mostrarDialogoProximidad = false
-                                        Toast.makeText(context, "Reporte marcado como no verificado", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            ) {
-                                Text("No ocurre / Falsa alarma", color = Color.Gray)
+                            TextButton(onClick = {
+                                mostrarDialogoProximidad = false
+                            }) {
+                                Text("Ignorar", color = colores.primary)
                             }
                         }
                     )

@@ -2,29 +2,33 @@ package com.example.proyectofinal.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// VERDE INSTITUCIONAL
-val GreenPrimary = Color(0xFF0B6E4F)
-val GreenPrimaryDark = Color(0xFF094F39)
+// AZUL INSTITUCIONAL — seguridad ciudadana
+val BluePrimary = Color(0xFF1E3A8A)
+val BluePrimaryDark = Color(0xFF1E40AF)
 
-// COLORES SECUNDARIOS
-val GreenSecondary = Color(0xFF4FAF9A)
+// Alias de compatibilidad para pantallas existentes
+val GreenPrimary = BluePrimary
+val GreenPrimaryDark = BluePrimaryDark
 
-// COLORES PARA LOS FONDOS
-val BackgroundLight = Color(0xFFF6F9F8)
-val BackgroundDark = Color(0xFF0E1B17)
+// COLOR SECUNDARIO
+val BlueSecondary = Color(0xFF2563EB)
 
-// COLORES PARA SUPERFICIES (cards)
+// FONDOS
+val BackgroundLight = Color(0xFFF8FAFC)
+val BackgroundDark = Color(0xFF0F172A)
+
+// SUPERFICIES (cards)
 val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceDark = Color(0xFF162622)
+val SurfaceDark = Color(0xFF1E293B)
 
-// COLORES PARA EL TEXTO
+// TEXTO
 val TextPrimaryLight = Color(0xFF1B1B1B)
-val TextPrimaryDark = Color(0xFFE8EDED)
+val TextPrimaryDark = Color(0xFFE2E8F0)
 
-// COLOR PARA LOS ESTADOS
+// ESTADOS
 val ErrorColor = Color(0xFFD32F2F)
 
-// COLORES PARA REPORTES E INCIDENTES
+// REPORTES E INCIDENTES
 val OrangeAlert = Color(0xFFFF8A65)
 val RedEmergency = Color(0xFFFF0000)
 

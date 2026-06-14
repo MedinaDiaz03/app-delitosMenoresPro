@@ -21,7 +21,6 @@ import com.example.proyectofinal.components.navigation.BottomNavigationBar
 import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
-import com.example.proyectofinal.ui.theme.GreenPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,15 +37,10 @@ fun HistorialGlobalScreen(navController: NavController) {
     var fechaInicio by remember { mutableStateOf<Long?>(null) }
     var fechaFin by remember { mutableStateOf<Long?>(null) }
 
-    val colores = MaterialTheme.colorScheme
-
     fun obtenerHorario(timestamp: Long): String {
         val calendar = java.util.Calendar.getInstance()
         calendar.timeInMillis = timestamp
-
-        val hora = calendar.get(java.util.Calendar.HOUR_OF_DAY)
-
-        return when (hora) {
+        return when (calendar.get(java.util.Calendar.HOUR_OF_DAY)) {
             in 6..11 -> "Mañana"
             in 12..17 -> "Tarde"
             in 18..23 -> "Noche"
@@ -58,22 +52,15 @@ fun HistorialGlobalScreen(navController: NavController) {
         reportesFiltrados = reportesOriginales.filter { reporte ->
             val matchCategoria = categoriaSeleccionada == "Todas" ||
                     reporte.categoria.equals(categoriaSeleccionada, true)
-
-            val fechaReporteMs = reporte.fecha.toDate().time
-            val horario = obtenerHorario(fechaReporteMs)
+            val fechaMs = reporte.fecha.toDate().time
             val matchHorario = horarioSeleccionado == "Todos" ||
-                    horario == horarioSeleccionado
-
+                    obtenerHorario(fechaMs) == horarioSeleccionado
             val matchFecha = when {
-                fechaInicio != null && fechaFin != null ->
-                    fechaReporteMs in fechaInicio!!..fechaFin!!
-                fechaInicio != null ->
-                    fechaReporteMs >= fechaInicio!!
-                fechaFin != null ->
-                    fechaReporteMs <= fechaFin!!
+                fechaInicio != null && fechaFin != null -> fechaMs in fechaInicio!!..fechaFin!!
+                fechaInicio != null -> fechaMs >= fechaInicio!!
+                fechaFin != null -> fechaMs <= fechaFin!!
                 else -> true
             }
-
             matchCategoria && matchHorario && matchFecha
         }
     }
@@ -81,25 +68,31 @@ fun HistorialGlobalScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         val usuario = authRepo.obtenerDatosUsuarioActual()
         esPolicia = usuario?.rol == "policia"
-
-        repo.obtenerTodosLosReportes {
-            reportesOriginales = it
-            reportesFiltrados = it
+        val uidActual = usuario?.uid ?: ""
+        repo.obtenerTodosLosReportes { todos ->
+            val sinPropios = todos.filter { it.usuarioId != uidActual }
+            reportesOriginales = sinPropios
+            reportesFiltrados = sinPropios
         }
     }
 
     Scaffold(
+        containerColor = Color(0xFFF8FAFC),
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Historial Global 🌍", color = GreenPrimary, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Historial Global",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF1E293B)
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = GreenPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colores.surface)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF8FAFC))
             )
         },
         bottomBar = { BottomNavigationBar(navController, esPolicia = esPolicia) }
@@ -108,19 +101,25 @@ fun HistorialGlobalScreen(navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            Text("Filtros 🔎", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── FILTROS ──
+            Text(
+                "Filtros",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color(0xFF1E293B)
+            )
+
             Spacer(modifier = Modifier.height(10.dp))
 
             DropdownMenuBox(
                 label = "Categoría",
                 opciones = listOf("Todas", "Robo", "Vandalismo", "Pelea", "Drogas", "Acoso", "Infraestructura"),
                 seleccion = categoriaSeleccionada,
-                onSelected = {
-                    categoriaSeleccionada = it
-                    filtrarReportes()
-                }
+                onSelected = { categoriaSeleccionada = it; filtrarReportes() }
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -129,76 +128,75 @@ fun HistorialGlobalScreen(navController: NavController) {
                 label = "Horario",
                 opciones = listOf("Todos", "Mañana", "Tarde", "Noche", "Madrugada"),
                 seleccion = horarioSeleccionado,
-                onSelected = {
-                    horarioSeleccionado = it
-                    filtrarReportes()
-                }
+                onSelected = { horarioSeleccionado = it; filtrarReportes() }
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            Text("Rango de Fecha 📅", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Rango de fecha",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color(0xFF334155)
+            )
+
             Spacer(modifier = Modifier.height(8.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Button(
-                    onClick = {
-                        val ahora = System.currentTimeMillis()
-                        fechaInicio = ahora - (24 * 60 * 60 * 1000)
-                        fechaFin = ahora
-                        filtrarReportes()
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("24h", fontSize = 12.sp)
-                }
-
-                Button(
-                    onClick = {
-                        val ahora = System.currentTimeMillis()
-                        fechaInicio = ahora - (7 * 24 * 60 * 60 * 1000)
-                        fechaFin = ahora
-                        filtrarReportes()
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("Semana", fontSize = 12.sp)
-                }
-
-                Button(
-                    onClick = {
-                        fechaInicio = null
-                        fechaFin = null
-                        filtrarReportes()
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("Todo", fontSize = 12.sp)
+                listOf(
+                    "Hoy" to { val now = System.currentTimeMillis(); fechaInicio = now - 86_400_000; fechaFin = now },
+                    "Semana" to { val now = System.currentTimeMillis(); fechaInicio = now - 604_800_000; fechaFin = now },
+                    "Todo" to { fechaInicio = null; fechaFin = null }
+                ).forEach { (label, action) ->
+                    val isSelected = when (label) {
+                        "Todo" -> fechaInicio == null
+                        else -> false
+                    }
+                    OutlinedButton(
+                        onClick = { action(); filtrarReportes() },
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                        )
+                    ) {
+                        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (reportesOriginales.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = GreenPrimary)
+            when {
+                reportesOriginales.isEmpty() -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-            } else if (reportesFiltrados.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No hay reportes con estos filtros", color = colores.onSurfaceVariant)
+                reportesFiltrados.isEmpty() -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Sin reportes con estos filtros",
+                        color = Color(0xFF475569),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
-            } else {
-                LazyColumn {
+                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(reportesFiltrados) { reporte ->
                         ReporteItem(reporte) {
                             navController.navigate("report_detail/${reporte.id}")
                         }
                     }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
             }
         }
@@ -207,33 +205,28 @@ fun HistorialGlobalScreen(navController: NavController) {
 
 @Composable
 fun ReporteItem(reporte: Reporte, onClick: () -> Unit) {
-    val colores = MaterialTheme.colorScheme
-    
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = colores.surface),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
         onClick = onClick
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
-                        color = GreenPrimary.copy(alpha = 0.1f),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
                             text = reporte.categoria,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            color = GreenPrimary,
+                            color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )
@@ -241,38 +234,38 @@ fun ReporteItem(reporte: Reporte, onClick: () -> Unit) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = reporte.estado.uppercase(),
-                        color = when(reporte.estado) {
+                        color = when (reporte.estado) {
                             "activo" -> Color(0xFFE04F5F)
-                            "resuelto" -> Color(0xFF4CAF50)
-                            else -> colores.onSurfaceVariant
+                            "resuelto" -> Color(0xFF16A34A)
+                            else -> Color(0xFF64748B)
                         },
                         fontSize = 10.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 Text(
-                    text = if(reporte.descripcion.isEmpty()) "Sin descripción" else reporte.descripcion,
+                    text = if (reporte.descripcion.isEmpty()) "Sin descripción" else reporte.descripcion,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
-                    color = colores.onSurface
+                    color = Color(0xFF1E293B)
                 )
-                
+
                 Spacer(modifier = Modifier.height(4.dp))
-                
+
                 Text(
                     text = "Por: ${reporte.usuarioNombre}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = colores.onSurfaceVariant
+                    color = Color(0xFF64748B)
                 )
             }
-            
+
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = colores.onSurfaceVariant.copy(alpha = 0.5f)
+                tint = Color(0xFFCBD5E1)
             )
         }
     }
@@ -288,35 +281,38 @@ fun DropdownMenuBox(
     var expanded by remember { mutableStateOf(false) }
 
     Column {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color(0xFF334155)
+        )
         Spacer(modifier = Modifier.height(4.dp))
         OutlinedButton(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = Color(0xFF1E293B),
+                containerColor = Color.White
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1))
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(seleccion, fontSize = 14.sp)
-                Icon(Icons.Default.ArrowDropDown, null)
+                Text(seleccion, fontSize = 14.sp, color = Color(0xFF1E293B))
+                Icon(Icons.Default.ArrowDropDown, null, tint = Color(0xFF64748B))
             }
         }
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             opciones.forEach { opcion ->
                 DropdownMenuItem(
-                    text = { Text(opcion) },
-                    onClick = {
-                        onSelected(opcion)
-                        expanded = false
-                    }
+                    text = { Text(opcion, color = Color(0xFF1E293B)) },
+                    onClick = { onSelected(opcion); expanded = false }
                 )
             }
         }

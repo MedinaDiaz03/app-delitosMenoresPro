@@ -60,16 +60,16 @@ fun MapaConReportes(
     mapaOscuro: Boolean,
     esPolicia: Boolean,
     marcadoresVisibles: Boolean,
-    navController: NavController
+    navController: NavController,
+    userLocation: LatLng? = null
 ) {
     val context = LocalContext.current
     val liveRepo = remember { LocationShareRepositorio() }
     var ubicacionesEnVivo by remember { mutableStateOf(listOf<LocationShare>()) }
+    var reporteSeleccionado by remember { mutableStateOf<Reporte?>(null) }
 
     LaunchedEffect(Unit) {
-        liveRepo.escuchar {
-            ubicacionesEnVivo = it
-        }
+        liveRepo.escuchar { ubicacionesEnVivo = it }
     }
 
     val propiedadesMapa = MapProperties(
@@ -85,15 +85,10 @@ fun MapaConReportes(
         properties = propiedadesMapa,
         uiSettings = MapUiSettings(myLocationButtonEnabled = false)
     ) {
-        if (esPolicia) {
-            if (marcadoresVisibles) {
-                RenderMarkers(reportes, navController)
-            }
-        } else {
-            RenderMarkers(reportes, navController)
+        if (!esPolicia || marcadoresVisibles) {
+            RenderMarkers(reportes) { reporteSeleccionado = it }
         }
 
-        // Marcadores de ubicación en vivo (Azules)
         ubicacionesEnVivo.forEach { live ->
             Marker(
                 state = MarkerState(position = LatLng(live.latitud, live.longitud)),
@@ -103,22 +98,77 @@ fun MapaConReportes(
             )
         }
     }
+
+    // Dialog al hacer clic en un marcador
+    reporteSeleccionado?.let { reporte ->
+        val distanciaText = if (userLocation != null) {
+            val metros = calcularDistancia(
+                userLocation.latitude, userLocation.longitude,
+                reporte.latitud, reporte.longitud
+            ).toInt()
+            if (metros < 1000) "${metros}m" else "${"%.1f".format(metros / 1000.0)}km"
+        } else null
+
+        AlertDialog(
+            onDismissRequest = { reporteSeleccionado = null },
+            icon = {
+                Icon(
+                    Icons.Default.LocationOn,
+                    null,
+                    tint = Color(0xFFE04F5F),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(reporte.categoria.uppercase(), fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (distanciaText != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.NearMe, null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp))
+                            Text("Distancia: $distanciaText", fontSize = 14.sp, color = Color(0xFF1E3A8A))
+                        }
+                    }
+                    if (reporte.descripcion.isNotEmpty()) {
+                        Text(reporte.descripcion, fontSize = 13.sp, color = Color(0xFF334155))
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        reporteSeleccionado = null
+                        navController.navigate("report_detail/${reporte.id}")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                ) { Text("Ver detalles") }
+            },
+            dismissButton = {
+                TextButton(onClick = { reporteSeleccionado = null }) {
+                    Text("Cancelar", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        )
+    }
 }
 
 @Composable
-fun RenderMarkers(reportes: List<Reporte>, navController: NavController) {
+fun RenderMarkers(reportes: List<Reporte>, onReporteClick: (Reporte) -> Unit) {
     reportes.forEach { reporte ->
         if (reporte.latitud != 0.0 && reporte.longitud != 0.0) {
             val color = obtenerColorMarker(reporte.categoria)
             Marker(
-                state = MarkerState(
-                    position = LatLng(reporte.latitud, reporte.longitud)
-                ),
-                title = "Reporte",
-                snippet = reporte.categoria,
+                state = MarkerState(position = LatLng(reporte.latitud, reporte.longitud)),
+                title = reporte.categoria.uppercase(),
+                snippet = reporte.descripcion.take(60),
                 icon = BitmapDescriptorFactory.defaultMarker(color),
                 onClick = {
-                    navController.navigate("report_detail/${reporte.id}")
+                    onReporteClick(reporte)
                     true
                 }
             )
@@ -132,7 +182,7 @@ fun SecurityStatusCard() {
     Card(
         modifier = Modifier.fillMaxWidth(0.65f),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = colores.surface),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -140,7 +190,7 @@ fun SecurityStatusCard() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(colores.primary))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Estado: Seguro", fontSize = 14.sp, color = colores.onSurfaceVariant)
+                Text("Estado: Seguro", fontSize = 14.sp, color = Color(0xFF1E3A8A))
             }
             Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
@@ -179,13 +229,13 @@ fun FilterChipTemplate(text: String, icon: ImageVector, isSelected: Boolean) {
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = if (isSelected) Color.White else colores.onSurfaceVariant
+                tint = if (isSelected) Color.White else Color(0xFF1E3A8A)
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = text,
                 fontSize = 12.sp,
-                color = if (isSelected) Color.White else colores.onSurfaceVariant
+                color = if (isSelected) Color.White else Color(0xFF1E3A8A)
             )
         }
     }

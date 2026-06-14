@@ -12,6 +12,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -56,10 +57,20 @@ class LocationRepositorio(context: Context) {
     @SuppressLint("MissingPermission")
     suspend fun obtenerUbicacionActual(): Location? {
         return try {
-            fusedLocationClient.getCurrentLocation(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                null
-            ).await()
+            // Intentar last known location primero (instantáneo)
+            val ultimaUbicacion = fusedLocationClient.lastLocation.await()
+            if (ultimaUbicacion != null &&
+                System.currentTimeMillis() - ultimaUbicacion.time < 30_000L
+            ) {
+                return ultimaUbicacion
+            }
+            // Fallback: solicitar ubicación actual con precisión balanceada + timeout 5s
+            withTimeoutOrNull(5_000L) {
+                fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                    null
+                ).await()
+            }
         } catch (e: Exception) {
             null
         }

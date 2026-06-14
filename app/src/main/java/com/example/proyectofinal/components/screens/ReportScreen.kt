@@ -1,6 +1,8 @@
 package com.example.proyectofinal.components.screens
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.location.LocationManager
 import android.net.Uri
 import android.widget.Toast
@@ -35,7 +37,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
+import android.provider.Settings
+import java.io.File
 import com.example.proyectofinal.components.auth.PrimaryInputField
+import com.example.proyectofinal.servicios.GeocodingService
+import com.google.android.gms.maps.model.LatLng as MapsLatLng
 import com.example.proyectofinal.components.navigation.BottomNavigationBar
 import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
@@ -47,11 +53,42 @@ import com.example.proyectofinal.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 data class CategoryItem(val name: String, val icon: ImageVector, val color: Color)
+
+// Comprime y devuelve ByteArray directamente — sin FileProvider, sin paso intermedio a disco
+suspend fun comprimirImagen(context: Context, uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
+    try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
+        val original = BitmapFactory.decodeStream(inputStream)
+        inputStream.close()
+
+        val maxPx = 1024
+        val ratio = minOf(maxPx.toFloat() / original.width, maxPx.toFloat() / original.height)
+        val scaled = if (ratio < 1f) {
+            Bitmap.createScaledBitmap(
+                original,
+                (original.width * ratio).toInt(),
+                (original.height * ratio).toInt(),
+                true
+            )
+        } else original
+
+        val baos = java.io.ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+        if (scaled !== original) scaled.recycle()
+        original.recycle()
+
+        baos.toByteArray()
+    } catch (_: Exception) {
+        null
+    }
+}
 
 fun crearArchivoFotoTemporal(context: Context): Uri {
     val carpeta = File(context.cacheDir, "camera_photos").apply { mkdirs() }
@@ -96,8 +133,12 @@ fun ReportScreen(navController: NavController) {
 
     var descripcion by remember { mutableStateOf("") }
     var categoriaSeleccionada by remember { mutableStateOf<String?>(null) }
+    var categoriaError by remember { mutableStateOf<String?>(null) }
     var enviando by remember { mutableStateOf(false) }
+    var mostrarModalUbicacion by remember { mutableStateOf(false) }
     var imagenUri by remember { mutableStateOf<Uri?>(null) }
+    var ubicacionCacheada by remember { mutableStateOf<android.location.Location?>(null) }
+    var usuarioCacheado by remember { mutableStateOf<com.example.proyectofinal.modelos.Usuario?>(null) }
 
     var uriParaCamara by remember {
         mutableStateOf(crearArchivoFotoTemporal(context))
@@ -124,31 +165,88 @@ fun ReportScreen(navController: NavController) {
         while(true) {
             gpsActivo = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
                     locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-            delay(1000) // Verifica el estado real cada segundo
+            delay(1000)
         }
     }
 
-    // El candado definitivo: Requiere permiso otorgado Y el interruptor de ubicación del celular encendido
+    // Pre-caché de ubicación y datos de usuario en cuanto el permiso y GPS están listos
+    LaunchedEffect(locationPermissionState.status.isGranted, gpsActivo) {
+        if (locationPermissionState.status.isGranted && gpsActivo) {
+            ubicacionCacheada = locationRepositorio.obtenerUbicacionActual()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        usuarioCacheado = authRepositorioRemember.obtenerDatosUsuarioActual()
+    }
+
     val ubicacionCompletamenteValida = locationPermissionState.status.isGranted && gpsActivo
 
+    // Mostrar modal de activación al entrar si no hay ubicación válida
+    LaunchedEffect(gpsActivo, locationPermissionState.status.isGranted) {
+        if (!ubicacionCompletamenteValida) {
+            mostrarModalUbicacion = true
+        }
+    }
+
+    // Modal de activación de ubicación
+    if (mostrarModalUbicacion && !ubicacionCompletamenteValida) {
+        AlertDialog(
+            onDismissRequest = {
+                mostrarModalUbicacion = false
+                navController.popBackStack()
+            },
+            icon = { Icon(Icons.Default.LocationOn, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp)) },
+            title = { Text("Ubicación requerida", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (!locationPermissionState.status.isGranted)
+                        "Para subir un reporte necesitamos acceso a tu ubicación. ¿Conceder permiso ahora?"
+                    else
+                        "El GPS de tu celular está apagado. Para subir un reporte necesitamos tu ubicación. ¿Activar ahora?",
+                    color = Color(0xFF1E3A8A)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        mostrarModalUbicacion = false
+                        if (!locationPermissionState.status.isGranted) {
+                            locationPermissionState.launchPermissionRequest()
+                        } else {
+                            context.startActivity(android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(10.dp)
+                ) { Text("Activar") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    mostrarModalUbicacion = false
+                    navController.popBackStack()
+                }) { Text("Cancelar", color = MaterialTheme.colorScheme.primary) }
+            }
+        )
+    }
+
     Scaffold(
+        containerColor = Color(0xFFF8FAFC),
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Nuevo Reporte", color = colores.primary, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        "Nuevo reporte",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF1E293B)
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás", tint = colores.primary)
                     }
                 },
-                actions = {
-                    IconButton(onClick = { navController.navigate("profile") }) {
-                        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(colores.onSurface.copy(alpha = 0.1f))) {
-                            Icon(Icons.Default.Person, null, tint = colores.primary, modifier = Modifier.padding(4.dp))
-                        }
-                    }
-                }
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF8FAFC))
             )
         },
         bottomBar = { BottomNavigationBar(navController) }
@@ -172,20 +270,33 @@ fun ReportScreen(navController: NavController) {
                 }
             )
 
-            Column() {
-
-                PrimaryInputField(
-                    value = "",
-                    onValueChange = {},
-                    label = "Repor anonimo?",
-                    placeholder = "",
-                    leadingIcon = Icons.Default.Email,
-                )
-                Text("")
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Categoría del incidente", fontWeight = FontWeight.Bold)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Categoría del incidente",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E3A8A),
+                        fontSize = 15.sp
+                    )
+                    if (categoriaSeleccionada != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                categoriaSeleccionada!!,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
 
                 val categorias = listOf(
                     CategoryItem("Robo", Icons.Default.GppBad, CategoryRobo),
@@ -197,34 +308,50 @@ fun ReportScreen(navController: NavController) {
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (i in categorias.indices step 2) {
+                    categorias.chunked(3).forEach { fila ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TarjetaCategoria(
-                                item = categorias[i],
-                                estaSeleccionado = categoriaSeleccionada == categorias[i].name,
-                                modifier = Modifier.weight(1f),
-                                onClick = { categoriaSeleccionada = categorias[i].name }
-                            )
-                            if (i + 1 < categorias.size) {
+                            fila.forEach { cat ->
                                 TarjetaCategoria(
-                                    item = categorias[i + 1],
-                                    estaSeleccionado = categoriaSeleccionada == categorias[i + 1].name,
+                                    item = cat,
+                                    estaSeleccionado = categoriaSeleccionada == cat.name,
                                     modifier = Modifier.weight(1f),
-                                    onClick = { categoriaSeleccionada = categorias[i + 1].name }
+                                    onClick = {
+                                        categoriaSeleccionada = cat.name
+                                        categoriaError = null
+                                    }
                                 )
                             }
+                            repeat(3 - fila.size) { Spacer(modifier = Modifier.weight(1f)) }
                         }
                     }
+                }
+
+                if (categoriaError != null) {
+                    Text(
+                        categoriaError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
                 }
             }
 
             OutlinedTextField(
                 value = descripcion,
                 onValueChange = { descripcion = it },
-                label = { Text("Descripción (Opcional)") },
+                label = { Text("Descripción (Opcional)", color = Color(0xFF3B82F6)) },
                 modifier = Modifier.fillMaxWidth().height(120.dp),
-                shape = RoundedCornerShape(16.dp),
-                enabled = !enviando
+                shape = RoundedCornerShape(12.dp),
+                enabled = !enviando,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color(0xFFCBD5E1),
+                    focusedLabelColor = MaterialTheme.colorScheme.primary,
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    cursorColor = MaterialTheme.colorScheme.primary
+                ),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color(0xFF1E293B))
             )
 
             // UNICA ALERTA CRITICA VISUAL SI ALGO FALLA CON LA UBICACIÓN
@@ -278,61 +405,101 @@ fun ReportScreen(navController: NavController) {
                 }
             }
 
-            // BOTÓN DE ENVIAR REPORTES TOTALMENTE CONDICIONADO
+            // BOTÓN DE ENVIAR REPORTES
             Button(
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+                shape = RoundedCornerShape(12.dp),
                 onClick = {
-                    if (categoriaSeleccionada != null && ubicacionCompletamenteValida) {
-                        enviando = true
-                        scope.launch {
-                            val usuario = authRepositorio.obtenerDatosUsuarioActual()
-                            val ubicacion = locationRepositorio.obtenerUbicacionActual()
+                    if (enviando) return@Button
+                    // Validación: categoría siempre requerida + (descripción o imagen)
+                    when {
+                        categoriaSeleccionada == null ->
+                            categoriaError = "Selecciona una categoría del incidente"
+                        descripcion.isBlank() && imagenUri == null ->
+                            categoriaError = "Agrega una descripción o una foto de evidencia"
+                        ubicacionCompletamenteValida -> {
+                            categoriaError = null
+                            enviando = true
+                            scope.launch {
+                                try {
+                                    val usuario = usuarioCacheado
+                                        ?: authRepositorioRemember.obtenerDatosUsuarioActual()
+                                    val ubicacion = ubicacionCacheada
+                                        ?: locationRepositorio.obtenerUbicacionActual()
 
-                            var fotoUrl: String? = null
-                            if (imagenUri != null) {
-                                Toast.makeText(context, "Subiendo foto...", Toast.LENGTH_SHORT).show()
-                                val uploadResult = storageRepositorio.subirImagen(imagenUri!!, "reportes")
-                                if (uploadResult.isSuccess) {
-                                    fotoUrl = uploadResult.getOrNull()
-                                    Toast.makeText(context, "Foto subida OK", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    val error = uploadResult.exceptionOrNull()?.message ?: "Error desconocido"
-                                    Toast.makeText(context, "Error foto: $error", Toast.LENGTH_LONG).show()
+                                    // Geocodificación + compresión/upload en PARALELO
+                                    val direccionDeferred = async {
+                                        runCatching {
+                                            if (ubicacion != null)
+                                                GeocodingService.getAddressFromLatLng(
+                                                    context,
+                                                    MapsLatLng(ubicacion.latitude, ubicacion.longitude)
+                                                )
+                                            else null
+                                        }.getOrNull()
+                                    }
+                                    val fotoDeferred = async {
+                                        runCatching {
+                                            val uri = imagenUri
+                                            if (uri != null) {
+                                                val bytes = comprimirImagen(context, uri)
+                                                if (bytes != null)
+                                                    storageRepositorio.subirImagen(bytes, "reportes").getOrNull()
+                                                else null
+                                            } else null
+                                        }.getOrNull()
+                                    }
+
+                                    val direccion = direccionDeferred.await()
+                                    val fotoUrl = fotoDeferred.await()
+
+                                    val nuevoReporte = Reporte(
+                                        usuarioId = usuario?.uid ?: "",
+                                        usuarioNombre = usuario?.nombre ?: "Usuario",
+                                        categoria = categoriaSeleccionada!!,
+                                        descripcion = descripcion,
+                                        latitud = ubicacion?.latitude ?: 0.0,
+                                        longitud = ubicacion?.longitude ?: 0.0,
+                                        direccion = direccion ?: "Dirección no disponible",
+                                        fotoUrl = fotoUrl,
+                                        fecha = com.google.firebase.Timestamp.now()
+                                    )
+                                    val resultado = reportRepositorio.enviarReporte(nuevoReporte)
+                                    if (resultado.isSuccess) {
+                                        FCMHelper.enviarNotificacionGlobal(
+                                            context,
+                                            "Nuevo Reporte: ${nuevoReporte.categoria.uppercase()}",
+                                            "Se ha reportado un incidente: ${nuevoReporte.descripcion.take(50)}"
+                                        )
+                                        Toast.makeText(context, "Reporte enviado con éxito", Toast.LENGTH_SHORT).show()
+                                        navController.popBackStack()
+                                    } else {
+                                        Toast.makeText(context, "Error al enviar el reporte", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error inesperado: ${e.message}", Toast.LENGTH_LONG).show()
+                                } finally {
+                                    enviando = false
                                 }
-                            }
-
-                            val nuevoReporte = Reporte(
-                                usuarioId = usuario?.uid ?: "",
-                                usuarioNombre = usuario?.nombre ?: "Usuario",
-                                categoria = categoriaSeleccionada!!,
-                                descripcion = descripcion,
-                                latitud = ubicacion?.latitude ?: 0.0,
-                                longitud = ubicacion?.longitude ?: 0.0,
-                                fotoUrl = fotoUrl,
-                                fecha = com.google.firebase.Timestamp.now()
-                            )
-                            val resultado = reportRepositorio.enviarReporte(nuevoReporte)
-                            enviando = false
-                            if (resultado.isSuccess) {
-                                FCMHelper.enviarNotificacionGlobal(
-                                    context,
-                                    "🔔 Nuevo Reporte: ${nuevoReporte.categoria.uppercase()}",
-                                    "Se ha reportado un incidente: ${nuevoReporte.descripcion.take(50)}..."
-                                )
-                                Toast.makeText(context, "Reporte enviado con éxito", Toast.LENGTH_SHORT).show()
-                                navController.popBackStack()
-                            } else {
-                                Toast.makeText(context, "Error al enviar el reporte", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                // SE BLOQUEA EN GRIS AUTOMÁTICAMENTE SI NO SE CUMPLE LA REGLA DE UBICACIÓN COMPLETA
-                enabled = categoriaSeleccionada != null && !enviando && ubicacionCompletamenteValida
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                enabled = ubicacionCompletamenteValida,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                )
             ) {
                 if (enviando) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("Enviando...", fontWeight = FontWeight.Bold, color = Color.White)
                 } else {
                     Text("Enviar reporte", fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
@@ -348,36 +515,76 @@ fun ReportScreen(navController: NavController) {
 @Composable
 fun SeccionCapturaFoto(imagenUri: Uri?, onClick: () -> Unit) {
     val colores = MaterialTheme.colorScheme
-    Box(
+    androidx.compose.material3.Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp)
-            .background(colores.primaryContainer.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
-            .border(1.dp, colores.outlineVariant, RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
+            .height(220.dp)
             .clickable { onClick() },
-        contentAlignment = Alignment.Center
+        shape = RoundedCornerShape(20.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, if (imagenUri != null) colores.primary.copy(alpha = 0.4f) else Color(0xFFE2E8F0)),
+        elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        if (imagenUri != null) {
-            Image(
-                painter = rememberAsyncImagePainter(imagenUri),
-                contentDescription = "Imagen seleccionada",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.3f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Edit, null, tint = Color.White, modifier = Modifier.size(32.dp))
-            }
-        } else {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.PhotoCamera, null, tint = colores.primary, modifier = Modifier.size(40.dp))
-                Spacer(Modifier.height(12.dp))
-                Text("Toca para tomar foto o adjuntar", color = colores.onSurfaceVariant, fontSize = 14.sp)
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (imagenUri != null) {
+                Image(
+                    painter = rememberAsyncImagePainter(imagenUri),
+                    contentDescription = "Imagen seleccionada",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(20.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Surface(
+                        modifier = Modifier.padding(12.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color.White.copy(alpha = 0.92f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Edit, null, tint = colores.primary, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Cambiar foto", color = colores.primary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(CircleShape)
+                            .background(colores.primary.copy(alpha = 0.08f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, null, tint = colores.primary, modifier = Modifier.size(34.dp))
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Agregar foto de evidencia",
+                        fontWeight = FontWeight.SemiBold,
+                        color = colores.primary,
+                        fontSize = 15.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Opcional · Toca para abrir la cámara",
+                        color = Color(0xFF3B82F6),
+                        fontSize = 13.sp
+                    )
+                }
             }
         }
     }
@@ -385,18 +592,32 @@ fun SeccionCapturaFoto(imagenUri: Uri?, onClick: () -> Unit) {
 
 @Composable
 fun TarjetaCategoria(item: CategoryItem, estaSeleccionado: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val colores = MaterialTheme.colorScheme
     Card(
-        modifier = modifier.height(80.dp).clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.height(64.dp).clickable { onClick() },
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (estaSeleccionado) item.color.copy(alpha = 0.1f) else colores.surface
+            containerColor = if (estaSeleccionado) item.color.copy(alpha = 0.1f) else Color.White
         ),
-        border = BorderStroke(1.dp, if (estaSeleccionado) item.color else colores.outlineVariant)
+        border = BorderStroke(
+            width = if (estaSeleccionado) 1.5.dp else 1.dp,
+            color = if (estaSeleccionado) item.color else Color(0xFFE2E8F0)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            Icon(item.icon, null, tint = item.color, modifier = Modifier.size(20.dp))
-            Text(item.name, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(item.icon, null, tint = item.color, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(
+                item.name,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (estaSeleccionado) item.color else Color(0xFF1E3A8A),
+                maxLines = 1
+            )
         }
     }
 }

@@ -26,7 +26,7 @@ fun DividerWithText(
             text = text,
             modifier = Modifier.padding(horizontal = 12.dp),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            color = MaterialTheme.colorScheme.primary
         )
 
         Divider(

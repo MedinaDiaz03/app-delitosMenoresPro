@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -27,25 +28,19 @@ import coil.compose.rememberAsyncImagePainter
 import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
-import com.example.proyectofinal.ui.theme.GreenPrimary
 import java.text.SimpleDateFormat
 import java.util.*
-
-// ─── PANTALLA PRINCIPAL ────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorialRepoScreen(navController: NavController) {
-    // Estado simple: lista de reportes + loading
     val reportRepositorio = remember { ReporteRepositorio() }
-    val authRepositorio   = remember { AutenticacionRepositorio() }
-    var reportes  by remember { mutableStateOf<List<Reporte>>(emptyList()) }
-    var cargando  by remember { mutableStateOf(true) }
-    var filtro    by remember { mutableStateOf("Todos") }
+    val authRepositorio = remember { AutenticacionRepositorio() }
+    var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
+    var cargando by remember { mutableStateOf(true) }
+    var filtro by remember { mutableStateOf("Todos") }
     var esPolicia by remember { mutableStateOf(false) }
-    val colores = MaterialTheme.colorScheme
 
-    // Cargar reportes del usuario al entrar
     LaunchedEffect(Unit) {
         val usuario = authRepositorio.obtenerDatosUsuarioActual()
         if (usuario != null) {
@@ -55,12 +50,11 @@ fun HistorialRepoScreen(navController: NavController) {
         cargando = false
     }
 
-    // Filtrar por categoría (si no es "Todos")
     val reportesFiltrados = if (filtro == "Todos") reportes
     else reportes.filter { it.categoria == filtro }
 
     Scaffold(
-        containerColor = colores.background,
+        containerColor = Color(0xFFF8FAFC),
         topBar = { HistorialTopBar(navController) },
         bottomBar = { HistorialBottomBar(navController, esPolicia) }
     ) { padding ->
@@ -68,38 +62,44 @@ fun HistorialRepoScreen(navController: NavController) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(colores.background)
         ) {
-            // Título
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Text(
-                    "Mi Historial de\nReportes",
-                    fontSize = 28.sp,
+                    "Mi historial de\nreportes",
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
-                    lineHeight = 34.sp
+                    lineHeight = 32.sp,
+                    color = Color(0xFF1E293B)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "Rastrea tus contribuciones a la comunidad",
-                    color = colores.onSurfaceVariant,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    color = Color(0xFF475569)
                 )
             }
 
-            // Chips de filtro
             val filtros = listOf("Todos", "Robo", "Vandalismo", "Pelea", "Drogas", "Acoso", "Infraestructura")
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(filtros) { f ->
                     FilterChip(
                         selected = filtro == f,
                         onClick = { filtro = f },
-                        label = { Text(f) },
+                        label = { Text(f, fontWeight = if (filtro == f) FontWeight.SemiBold else FontWeight.Normal) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = GreenPrimary,
-                            selectedLabelColor = Color.White
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = Color.White,
+                            containerColor = Color.White,
+                            labelColor = Color(0xFF334155)
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = filtro == f,
+                            borderColor = Color(0xFFCBD5E1),
+                            selectedBorderColor = MaterialTheme.colorScheme.primary
                         ),
                         shape = RoundedCornerShape(20.dp)
                     )
@@ -108,10 +108,9 @@ fun HistorialRepoScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Contenido
             when {
                 cargando -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = GreenPrimary)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 reportesFiltrados.isEmpty() -> HistorialVacioView(navController, esPolicia)
                 else -> LazyColumn(
@@ -128,56 +127,48 @@ fun HistorialRepoScreen(navController: NavController) {
     }
 }
 
-// ─── TARJETA DE REPORTE CON IMAGEN ────────────────────────────────────────────
-
 @Composable
 fun ReportCard(reporte: Reporte, navController: NavController) {
-    val colores = MaterialTheme.colorScheme
     val fecha = formatearFecha(reporte.fecha)
     val tieneImagen = !reporte.fotoUrl.isNullOrEmpty() && reporte.fotoUrl.startsWith("http")
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                // Navegamos pasando el ID por la ruta — más estable que savedStateHandle
-                navController.navigate("report_detail/${reporte.id}")
-            },
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = colores.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = Modifier.fillMaxWidth().clickable {
+            navController.navigate("report_detail/${reporte.id}")
+        },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
     ) {
         Column {
-            // ── Imagen de evidencia (ocupa todo el ancho si existe) ──
             if (tieneImagen) {
                 Image(
                     painter = rememberAsyncImagePainter(reporte.fotoUrl),
-                    contentDescription = "Evidencia del reporte",
+                    contentDescription = "Evidencia",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)),
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
                     contentScale = ContentScale.Crop
                 )
             }
 
-            // ── Info del reporte ──
             Row(
                 modifier = Modifier.padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Ícono de categoría (solo si no hay imagen)
                 if (!tieneImagen) {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(44.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(GreenPrimary.copy(alpha = 0.1f)),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Report, null, tint = GreenPrimary, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Report, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     }
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -189,18 +180,19 @@ fun ReportCard(reporte: Reporte, navController: NavController) {
                         Text(
                             reporte.categoria.ifEmpty { "Incidente" },
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                            fontSize = 15.sp,
+                            color = Color(0xFF1E293B)
                         )
                         Surface(
-                            color = GreenPrimary.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(10.dp)
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
                                 "Enviado",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = GreenPrimary
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -210,7 +202,7 @@ fun ReportCard(reporte: Reporte, navController: NavController) {
                     Text(
                         reporte.descripcion.ifEmpty { "Sin descripción" },
                         fontSize = 13.sp,
-                        color = colores.onSurfaceVariant,
+                        color = Color(0xFF475569),
                         maxLines = 2
                     )
 
@@ -220,16 +212,12 @@ fun ReportCard(reporte: Reporte, navController: NavController) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.Schedule, null, tint = colores.onSurfaceVariant, modifier = Modifier.size(12.dp))
-                        Text(
-                            fecha,
-                            fontSize = 11.sp,
-                            color = colores.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
+                        Icon(Icons.Default.Schedule, null, tint = Color(0xFF94A3B8), modifier = Modifier.size(12.dp))
+                        Text(fecha, fontSize = 11.sp, color = Color(0xFF94A3B8))
                         if (tieneImagen) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Icon(Icons.Default.Image, null, tint = GreenPrimary, modifier = Modifier.size(12.dp))
-                            Text("Foto", fontSize = 11.sp, color = GreenPrimary)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(12.dp))
+                            Text("Foto", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -238,53 +226,45 @@ fun ReportCard(reporte: Reporte, navController: NavController) {
     }
 }
 
-// ─── VISTA VACÍA ──────────────────────────────────────────────────────────────
-
 @Composable
 fun HistorialVacioView(navController: NavController, esPolicia: Boolean = false) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
+        modifier = Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(120.dp)
+                .size(96.dp)
                 .clip(CircleShape)
-                .background(GreenPrimary.copy(alpha = 0.1f)),
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.History, null, tint = GreenPrimary, modifier = Modifier.size(64.dp))
+            Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(
-            "Sin reportes aún",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Text("Sin reportes aún", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
 
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
             "Sé el primero en alertar a tu comunidad y contribuir a la seguridad del barrio.",
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            lineHeight = 22.sp
+            fontSize = 14.sp,
+            color = Color(0xFF475569),
+            textAlign = TextAlign.Center,
+            lineHeight = 20.sp
         )
 
         if (!esPolicia) {
             Spacer(modifier = Modifier.height(32.dp))
-
             Button(
                 onClick = { navController.navigate("report") },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
-                shape = RoundedCornerShape(14.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                shape = RoundedCornerShape(12.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
             ) {
                 Icon(Icons.Default.Add, null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -294,8 +274,6 @@ fun HistorialVacioView(navController: NavController, esPolicia: Boolean = false)
     }
 }
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-
 fun formatearFecha(fecha: com.google.firebase.Timestamp?): String {
     return try {
         if (fecha != null) SimpleDateFormat("dd MMM yyyy • HH:mm", Locale.getDefault()).format(fecha.toDate())
@@ -303,62 +281,83 @@ fun formatearFecha(fecha: com.google.firebase.Timestamp?): String {
     } catch (_: Exception) { "Fecha no disponible" }
 }
 
-// ─── TOP BAR ──────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorialTopBar(navController: NavController) {
-    val colores = MaterialTheme.colorScheme
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Shield, null, tint = GreenPrimary, modifier = Modifier.size(22.dp))
+                Icon(Icons.Default.Shield, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("SafetyConnect", color = GreenPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(
+                    "SafetyConnect",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
             }
         },
         navigationIcon = {
             IconButton(onClick = { navController.popBackStack() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = GreenPrimary)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = MaterialTheme.colorScheme.primary)
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = colores.background)
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF8FAFC))
     )
 }
-
-// ─── BOTTOM BAR ───────────────────────────────────────────────────────────────
 
 @Composable
 fun HistorialBottomBar(navController: NavController, esPolicia: Boolean = false) {
     NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 8.dp
+        containerColor = Color.White,
+        tonalElevation = 0.dp
     ) {
         NavigationBarItem(
             selected = false,
             onClick = { navController.navigate("home") },
             icon = { Icon(Icons.Default.Map, "Mapa") },
-            label = { Text("Mapa") }
+            label = { Text("Mapa") },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                unselectedIconColor = Color(0xFF94A3B8),
+                unselectedTextColor = Color(0xFF94A3B8),
+                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+            )
         )
         if (!esPolicia) {
             NavigationBarItem(
                 selected = false,
                 onClick = { navController.navigate("report") },
                 icon = { Icon(Icons.Default.AddCircle, "Reportar") },
-                label = { Text("Reportar") }
+                label = { Text("Reportar") },
+                colors = NavigationBarItemDefaults.colors(
+                    unselectedIconColor = Color(0xFF94A3B8),
+                    unselectedTextColor = Color(0xFF94A3B8),
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                )
             )
         }
         NavigationBarItem(
             selected = true,
             onClick = { },
             icon = { Icon(Icons.Default.History, "Historial") },
-            label = { Text("Historial") }
+            label = { Text("Historial") },
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary,
+                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+            )
         )
         NavigationBarItem(
             selected = false,
             onClick = { navController.navigate("profile") },
             icon = { Icon(Icons.Default.Person, "Perfil") },
-            label = { Text("Perfil") }
+            label = { Text("Perfil") },
+            colors = NavigationBarItemDefaults.colors(
+                unselectedIconColor = Color(0xFF94A3B8),
+                unselectedTextColor = Color(0xFF94A3B8),
+                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+            )
         )
     }
 }

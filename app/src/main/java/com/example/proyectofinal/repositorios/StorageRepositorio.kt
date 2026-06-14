@@ -1,48 +1,49 @@
 package com.example.proyectofinal.repositorios
 
-import android.net.Uri
-import com.cloudinary.android.MediaManager
-import com.cloudinary.android.callback.ErrorInfo
-import com.cloudinary.android.callback.UploadCallback
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
+import com.example.proyectofinal.BuildConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class StorageRepositorio {
 
-    suspend fun subirImagen(uri: Uri, path: String): Result<String> {
-        return try {
-            suspendCancellableCoroutine { continuation ->
-                android.util.Log.d("CLOUDINARY", "Iniciando subida de: $uri")
-                MediaManager.get().upload(uri)
-                    .option("folder", path)
-                    .option("upload_preset", "reportes_preset")
-                    .callback(object : UploadCallback {
-                        override fun onStart(requestId: String) {
-                            android.util.Log.d("CLOUDINARY", "onStart: $requestId")
-                        }
-                        override fun onProgress(requestId: String, bytes: Long, totalBytes: Long) {
-                            android.util.Log.d("CLOUDINARY", "onProgress: $bytes/$totalBytes")
-                        }
-                        override fun onSuccess(requestId: String, resultData: Map<*, *>) {
-                            val url = resultData["secure_url"] as? String
-                            android.util.Log.d("CLOUDINARY", "onSuccess url: $url")
-                            if (url != null) continuation.resume(Result.success(url))
-                            else continuation.resume(Result.failure(Exception("URL nula")))
-                        }
-                        override fun onError(requestId: String, error: ErrorInfo) {
-                            android.util.Log.e("CLOUDINARY", "onError: ${error.description} code:${error.code}")
-                            continuation.resume(Result.failure(Exception("${error.description}")))
-                        }
-                        override fun onReschedule(requestId: String, error: ErrorInfo) {
-                            android.util.Log.e("CLOUDINARY", "onReschedule: ${error.description}")
-                            continuation.resume(Result.failure(Exception("Reprogramado: ${error.description}")))
-                        }
-                    })
-                    .dispatch()
+    // Upload directo vía HTTP a Cloudinary — sin WorkManager, sin cola de background service
+    suspend fun subirImagen(bytes: ByteArray, path: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val cloudName = BuildConfig.CLOUDINARY_CLOUD_NAME
+                val boundary = "Boundary${System.currentTimeMillis()}"
+                val url = URL("https://api.cloudinary.com/v1_1/$cloudName/image/upload")
+
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.doOutput = true
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 45_000
+                conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+                conn.outputStream.use { out ->
+                    fun part(name: String, value: String) {
+                        out.write("--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n".toByteArray())
+                    }
+                    part("upload_preset", "reportes_preset")
+                    part("folder", path)
+                    out.write("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"img.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n".toByteArray())
+                    out.write(bytes)
+                    out.write("\r\n--$boundary--\r\n".toByteArray())
+                }
+
+                if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                    val body = conn.inputStream.bufferedReader().readText()
+                    Result.success(JSONObject(body).getString("secure_url"))
+                } else {
+                    val err = conn.errorStream?.bufferedReader()?.readText() ?: conn.responseCode.toString()
+                    Result.failure(Exception("Cloudinary error: $err"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-        } catch (e: Exception) {
-            android.util.Log.e("CLOUDINARY", "Excepcion general: ${e.message}")
-            Result.failure(e)
         }
-    }
 }
