@@ -62,9 +62,27 @@ fun AlertsScreen(navController: NavController) {
         if (loc != null) {
             val latLng = LatLng(loc.latitude, loc.longitude)
             userLocation = latLng
-            reportesCercanos = reporteRepo.obtenerReportesEnRadio(latLng.latitude, latLng.longitude, 1000.0)
+            
+            // Escuchar cambios en tiempo real
+            reporteRepo.escucharReportes { listaCompleta ->
+                val ahora = System.currentTimeMillis()
+                val unDiaEnMillis = 24 * 60 * 60 * 1000L
+                
+                // Filtrar por distancia (1km) y tiempo (24h)
+                reportesCercanos = listaCompleta.filter { repo ->
+                    val fechaMs = repo.fecha?.toDate()?.time ?: 0L
+                    val esReciente = (ahora - fechaMs) <= unDiaEnMillis
+                    val estaCerca = reporteRepo.calcularDistanciaMetros(
+                        latLng.latitude, latLng.longitude,
+                        repo.latitud, repo.longitud
+                    ) <= 1000.0
+                    esReciente && estaCerca
+                }
+                cargando = false
+            }
+        } else {
+            cargando = false
         }
-        cargando = false
     }
 
     Scaffold(
@@ -73,21 +91,21 @@ fun AlertsScreen(navController: NavController) {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = Color.White)
                     }
                 },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Shield, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "Alertas de seguridad",
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = Color(0xFF1E3A8A)
+                            color = Color.White
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF8FAFC))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E3A8A))
             )
         },
         bottomBar = { BottomNavigationBar(navController, esPolicia = esPolicia) }

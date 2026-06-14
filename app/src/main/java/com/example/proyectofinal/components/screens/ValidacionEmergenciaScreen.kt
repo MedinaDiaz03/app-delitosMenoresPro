@@ -67,15 +67,15 @@ fun ValidacionEmergenciaScreen(
                     Text(
                         "Verificar Incidente",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFF1E293B)
+                        color = Color.White
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF8FAFC))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E3A8A))
             )
         }
     ) { padding ->

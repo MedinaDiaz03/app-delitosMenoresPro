@@ -1,5 +1,6 @@
 package com.example.proyectofinal.components.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,6 +49,8 @@ fun HistorialGlobalScreen(navController: NavController) {
         }
     }
 
+    var rangoSeleccionado by remember { mutableStateOf("Todo") }
+
     fun filtrarReportes() {
         reportesFiltrados = reportesOriginales.filter { reporte ->
             val matchCategoria = categoriaSeleccionada == "Todas" ||
@@ -68,11 +71,10 @@ fun HistorialGlobalScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         val usuario = authRepo.obtenerDatosUsuarioActual()
         esPolicia = usuario?.rol == "policia"
-        val uidActual = usuario?.uid ?: ""
-        repo.obtenerTodosLosReportes { todos ->
-            val sinPropios = todos.filter { it.usuarioId != uidActual }
-            reportesOriginales = sinPropios
-            reportesFiltrados = sinPropios
+        repo.escucharReportes { todos ->
+            // Ahora incluimos todos los reportes (incluyendo los propios) para evitar confusión
+            reportesOriginales = todos
+            reportesFiltrados = todos
         }
     }
 
@@ -84,15 +86,15 @@ fun HistorialGlobalScreen(navController: NavController) {
                     Text(
                         "Historial Global",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Color(0xFF1E293B)
+                        color = Color.White
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF8FAFC))
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E3A8A))
             )
         },
         bottomBar = { BottomNavigationBar(navController, esPolicia = esPolicia) }
@@ -146,24 +148,41 @@ fun HistorialGlobalScreen(navController: NavController) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(
-                    "Hoy" to { val now = System.currentTimeMillis(); fechaInicio = now - 86_400_000; fechaFin = now },
-                    "Semana" to { val now = System.currentTimeMillis(); fechaInicio = now - 604_800_000; fechaFin = now },
-                    "Todo" to { fechaInicio = null; fechaFin = null }
-                ).forEach { (label, action) ->
-                    val isSelected = when (label) {
-                        "Todo" -> fechaInicio == null
-                        else -> false
+                    "Hoy" to { 
+                        val cal = java.util.Calendar.getInstance()
+                        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                        cal.set(java.util.Calendar.MINUTE, 0)
+                        cal.set(java.util.Calendar.SECOND, 0)
+                        cal.set(java.util.Calendar.MILLISECOND, 0)
+                        fechaInicio = cal.timeInMillis
+                        fechaFin = null
+                        rangoSeleccionado = "Hoy"
+                    },
+                    "Semana" to { 
+                        val cal = java.util.Calendar.getInstance()
+                        cal.add(java.util.Calendar.DAY_OF_YEAR, -7)
+                        fechaInicio = cal.timeInMillis
+                        fechaFin = null
+                        rangoSeleccionado = "Semana"
+                    },
+                    "Todo" to { 
+                        fechaInicio = null
+                        fechaFin = null
+                        rangoSeleccionado = "Todo"
                     }
+                ).forEach { (label, action) ->
+                    val isSelected = rangoSeleccionado == label
                     OutlinedButton(
                         onClick = { action(); filtrarReportes() },
                         modifier = Modifier.weight(1f).height(40.dp),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(0.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary
+                            containerColor = if (isSelected) Color(0xFF1E3A8A) else Color.Transparent,
+                            contentColor = if (isSelected) Color.White else Color(0xFF1E3A8A)
                         ),
                         border = androidx.compose.foundation.BorderStroke(
-                            1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                            1.dp, Color(0xFF1E3A8A).copy(alpha = 0.4f)
                         )
                     ) {
                         Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium)
@@ -308,7 +327,11 @@ fun DropdownMenuBox(
             }
         }
 
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = Color(0xFFBFDBFE)
+        ) {
             opciones.forEach { opcion ->
                 DropdownMenuItem(
                     text = { Text(opcion, color = Color(0xFF1E293B)) },

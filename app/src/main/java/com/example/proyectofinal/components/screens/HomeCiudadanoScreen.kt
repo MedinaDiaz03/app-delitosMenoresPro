@@ -27,6 +27,8 @@ import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.servicios.NotificationHelper
+import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
 
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -66,11 +68,15 @@ fun HomeCiudadanoScreen(navController: NavController) {
     val authRepositorio = remember { AutenticacionRepositorio() }
     val reporteRepositorio = remember { ReporteRepositorio() }
     val locationRepositorio = remember { LocationRepositorio(context) }
+    val userFirebase = remember { FirebaseAuth.getInstance().currentUser }
+    val photoUrl = userFirebase?.photoUrl
 
     var usuario by remember { mutableStateOf<Usuario?>(null) }
     var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
     var mapaOscuro by remember { mutableStateOf(false) }
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
+    var mostrarIconos by remember { mutableStateOf(true) }
+    var soloHoy by remember { mutableStateOf(false) }
 
     val prefs = context.getSharedPreferences("ignored_reports", Context.MODE_PRIVATE)
     val idsIgnorados = remember {
@@ -80,7 +86,6 @@ fun HomeCiudadanoScreen(navController: NavController) {
     var mostrarDialogoProximidad by remember { mutableStateOf(false) }
     var reporteCercano by remember { mutableStateOf<Reporte?>(null) }
     val idsNotificados = remember { mutableSetOf<String>() }
-    val appStartTime = remember { System.currentTimeMillis() }
 
     val locationPermission = rememberPermissionState(
         android.Manifest.permission.ACCESS_FINE_LOCATION
@@ -92,21 +97,30 @@ fun HomeCiudadanoScreen(navController: NavController) {
 
     LaunchedEffect(Unit) {
         usuario = authRepositorio.obtenerDatosUsuarioActual()
-        reportes = reporteRepositorio.obtenerReportes().filter { it.estado == "activo" }
+        
+        // Escuchar reportes en tiempo real
+        reporteRepositorio.escucharReportes { lista ->
+            reportes = lista.filter { it.estado == "activo" }
+        }
 
         if (!locationPermission.status.isGranted) {
             locationPermission.launchPermissionRequest()
         }
 
-        // Loop de detección de proximidad (40m) y notificaciones (500m)
+        // Loop de detección de proximidad (50m) y notificaciones (1km)
         while (true) {
             if (locationPermission.status.isGranted) {
                 val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
                 if (ubicacionActual != null) {
+                    val ahora = System.currentTimeMillis()
+                    val unDiaEnMillis = 24 * 60 * 60 * 1000L
+
                     // Modal si hay incidente a menos de 50 metros, de otro usuario y no ignorado
                     val cercano = reportes.find { repo ->
+                        val fechaMs = repo.fecha.toDate().time
                         repo.id !in idsIgnorados &&
                         repo.usuarioId != usuario?.uid &&
+                        (ahora - fechaMs) <= unDiaEnMillis &&
                         calcularDistancia(
                             ubicacionActual.latitude, ubicacionActual.longitude,
                             repo.latitud, repo.longitud
@@ -119,19 +133,20 @@ fun HomeCiudadanoScreen(navController: NavController) {
                         prefs.edit().putStringSet("ids", idsIgnorados.toSet()).apply()
                     }
 
-                    // Notificación sistema para reportes nuevos dentro de 500m
+                    // Notificación sistema para reportes de las ÚLTIMAS 24H dentro de 1km
                     reportes.filter { repo ->
+                        val fechaMs = repo.fecha.toDate().time
                         repo.id !in idsNotificados &&
-                        (repo.fecha?.toDate()?.time ?: 0L) > appStartTime &&
+                        (ahora - fechaMs) <= unDiaEnMillis &&
                         calcularDistancia(
                             ubicacionActual.latitude, ubicacionActual.longitude,
                             repo.latitud, repo.longitud
-                        ) < 500.0
+                        ) < 1000.0
                     }.forEach { repo ->
                         idsNotificados.add(repo.id)
                         NotificationHelper.mostrarNotificacion(
                             context,
-                            "Incidente cercano: ${repo.categoria.uppercase()}",
+                            "Incidente detectado: ${repo.categoria.uppercase()}",
                             repo.descripcion.ifEmpty { "Nuevo reporte en tu zona" }
                         )
                     }
@@ -205,12 +220,20 @@ fun HomeCiudadanoScreen(navController: NavController) {
                                 .background(Color.White.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.Person,
-                                null,
-                                modifier = Modifier.size(36.dp),
-                                tint = Color.White
-                            )
+                            if (photoUrl != null) {
+                                AsyncImage(
+                                    model = photoUrl,
+                                    contentDescription = "Foto de perfil",
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.Person,
+                                    null,
+                                    modifier = Modifier.size(36.dp),
+                                    tint = Color.White
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
@@ -243,7 +266,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     selected = false,
                     onClick = {
                         scope.launch { drawerState.close() }
-                        navController.navigate("historial_repo")
+                        navController.navigate("historial_personal")
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     colors = NavigationDrawerItemDefaults.colors(
@@ -320,14 +343,14 @@ fun HomeCiudadanoScreen(navController: NavController) {
                 TopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Shield, null, tint = colores.primary, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(22.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("SafetyConnect", color = colores.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("SafetyConnect", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         }
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = colores.primary)
+                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
                         }
                     },
                     actions = {
@@ -336,19 +359,27 @@ fun HomeCiudadanoScreen(navController: NavController) {
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(colores.primary.copy(alpha = 0.1f)),
+                                    .background(Color.White.copy(alpha = 0.2f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    Icons.Default.Person,
-                                    null,
-                                    tint = colores.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                if (photoUrl != null) {
+                                    AsyncImage(
+                                        model = photoUrl,
+                                        contentDescription = "Foto de perfil",
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E3A8A))
                 )
             },
             bottomBar = { BottomNavigationBar(navController = navController) }
@@ -364,10 +395,25 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     locationGranted = locationPermission.status.isGranted,
                     mapaOscuro = mapaOscuro,
                     esPolicia = false,
-                    marcadoresVisibles = true,
+                    marcadoresVisibles = mostrarIconos,
                     navController = navController,
-                    userLocation = userLocation
+                    userLocation = userLocation,
+                    soloHoy = soloHoy
                 )
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ControlesMapaCard(
+                        mostrarIconos = mostrarIconos,
+                        onMostrarIconosChange = { mostrarIconos = it },
+                        soloHoy = soloHoy,
+                        onSoloHoyChange = { soloHoy = it }
+                    )
+                }
 
                 Column(
                     modifier = Modifier

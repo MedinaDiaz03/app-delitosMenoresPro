@@ -64,7 +64,7 @@ fun ProfileScreen(navController: NavController) {
                         Icon(Icons.AutoMirrored.Filled.Logout, "Salir", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E3A8A))
             )
         },
         bottomBar = { BottomNavigationBar(navController, esPolicia = usuario?.rol == "policia") }
@@ -134,7 +134,7 @@ fun ProfileScreen(navController: NavController) {
                         icono = Icons.Default.History,
                         titulo = "Historial de reportes",
                         subtitulo = "Ver todos tus reportes enviados",
-                        onClick = { navController.navigate("historial_repo") }
+                        onClick = { navController.navigate("historial_personal") }
                     )
                 }
                 OpcionMenu(

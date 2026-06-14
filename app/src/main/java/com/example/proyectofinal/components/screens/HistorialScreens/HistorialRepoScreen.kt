@@ -41,11 +41,13 @@ fun HistorialRepoScreen(navController: NavController) {
     var filtro by remember { mutableStateOf("Todos") }
     var esPolicia by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(key1 = true) {
+        cargando = true
         val usuario = authRepositorio.obtenerDatosUsuarioActual()
         if (usuario != null) {
             esPolicia = usuario.rol == "policia"
-            reportes = reportRepositorio.obtenerReportesPorUsuario(usuario.uid)
+            val resultado = reportRepositorio.obtenerReportesPorUsuario(usuario.uid)
+            reportes = resultado
         }
         cargando = false
     }
@@ -287,11 +289,16 @@ fun HistorialTopBar(navController: NavController) {
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Shield, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.Shield,
+                    null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     "SafetyConnect",
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
@@ -299,10 +306,14 @@ fun HistorialTopBar(navController: NavController) {
         },
         navigationIcon = {
             IconButton(onClick = { navController.popBackStack() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás", tint = MaterialTheme.colorScheme.primary)
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    "Atrás",
+                    tint = Color.White
+                )
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF8FAFC))
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E3A8A))
     )
 }
 

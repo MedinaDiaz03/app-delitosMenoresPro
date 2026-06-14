@@ -25,6 +25,9 @@ import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
+import com.example.proyectofinal.servicios.NotificationHelper
+import coil.compose.AsyncImage
+import com.google.firebase.auth.FirebaseAuth
 
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
@@ -48,17 +51,32 @@ fun HomePoliciaScreen(navController: NavController) {
     val authRepositorio = remember { AutenticacionRepositorio() }
     val reporteRepositorio = remember { ReporteRepositorio() }
     val locationRepositorio = remember { LocationRepositorio(context) }
+    val userFirebase = remember { FirebaseAuth.getInstance().currentUser }
+    val photoUrl = userFirebase?.photoUrl
 
     var usuario by remember { mutableStateOf<Usuario?>(null) }
     var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
     var mapaOscuro by remember { mutableStateOf(false) }
     var marcadoresVisibles by remember { mutableStateOf(true) }
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
+    var mostrarIconos by remember { mutableStateOf(true) }
+    var soloHoy by remember { mutableStateOf(false) }
+    val idsNotificados = remember { mutableSetOf<String>() }
+
+    val inicioDeHoy = remember {
+        java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
 
     // Animación de parpadeo para los reportes
+    var parpadeoVisible by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
         while (true) {
-            marcadoresVisibles = !marcadoresVisibles
+            parpadeoVisible = !parpadeoVisible
             delay(800)
         }
     }
@@ -73,10 +91,39 @@ fun HomePoliciaScreen(navController: NavController) {
 
     LaunchedEffect(Unit) {
         usuario = authRepositorio.obtenerDatosUsuarioActual()
-        reportes = reporteRepositorio.obtenerReportes().filter { it.estado == "activo" }
+        
+        // Escuchar reportes en tiempo real
+        reporteRepositorio.escucharReportes { lista ->
+            reportes = lista.filter { it.estado == "activo" }
+        }
 
         if (!locationPermission.status.isGranted) {
             locationPermission.launchPermissionRequest()
+        }
+
+        // Loop de notificaciones para el Policía (1km de radio)
+        while (true) {
+            if (locationPermission.status.isGranted) {
+                val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
+                if (ubicacionActual != null) {
+                    reportes.filter { repo ->
+                        repo.id !in idsNotificados &&
+                        (repo.fecha?.toDate()?.time ?: 0L) >= inicioDeHoy &&
+                        calcularDistancia(
+                            ubicacionActual.latitude, ubicacionActual.longitude,
+                            repo.latitud, repo.longitud
+                        ) < 1000.0
+                    }.forEach { repo ->
+                        idsNotificados.add(repo.id)
+                        NotificationHelper.mostrarNotificacion(
+                            context,
+                            "NUEVO REPORTE (Policía): ${repo.categoria.uppercase()}",
+                            repo.descripcion.ifEmpty { "Se ha detectado un incidente en su zona de patrullaje" }
+                        )
+                    }
+                }
+            }
+            delay(30000) // Verifica cada 30 segundos
         }
     }
 
@@ -146,12 +193,20 @@ fun HomePoliciaScreen(navController: NavController) {
                                 .background(Color.White.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.Person,
-                                null,
-                                modifier = Modifier.size(36.dp),
-                                tint = Color.White
-                            )
+                            if (photoUrl != null) {
+                                AsyncImage(
+                                    model = photoUrl,
+                                    contentDescription = "Foto de perfil",
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.Person,
+                                    null,
+                                    modifier = Modifier.size(36.dp),
+                                    tint = Color.White
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
@@ -273,14 +328,14 @@ fun HomePoliciaScreen(navController: NavController) {
                 TopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Shield, null, tint = colores.primary, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(22.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("SafetyConnect", color = colores.primary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("SafetyConnect", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         }
                     },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = colores.primary)
+                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
                         }
                     },
                     actions = {
@@ -289,19 +344,27 @@ fun HomePoliciaScreen(navController: NavController) {
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(colores.primary.copy(alpha = 0.1f)),
+                                    .background(Color.White.copy(alpha = 0.2f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    Icons.Default.Person,
-                                    null,
-                                    tint = colores.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                if (photoUrl != null) {
+                                    AsyncImage(
+                                        model = photoUrl,
+                                        contentDescription = "Foto de perfil",
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E3A8A))
                 )
             },
             bottomBar = { BottomNavigationBar(navController = navController, esPolicia = true) }
@@ -317,19 +380,24 @@ fun HomePoliciaScreen(navController: NavController) {
                     locationGranted = locationPermission.status.isGranted,
                     mapaOscuro = mapaOscuro,
                     esPolicia = true,
-                    marcadoresVisibles = marcadoresVisibles,
+                    marcadoresVisibles = mostrarIconos && parpadeoVisible,
                     navController = navController,
-                    userLocation = userLocation
+                    userLocation = userLocation,
+                    soloHoy = soloHoy
                 )
 
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
+                        .align(Alignment.TopStart)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    SecurityStatusCard()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    FilterChipsRow()
+                    ControlesMapaCard(
+                        mostrarIconos = mostrarIconos,
+                        onMostrarIconosChange = { mostrarIconos = it },
+                        soloHoy = soloHoy,
+                        onSoloHoyChange = { soloHoy = it }
+                    )
                 }
 
                 Column(
@@ -347,12 +415,6 @@ fun HomePoliciaScreen(navController: NavController) {
                         onClick = { scope.launch { volverAMiUbicacion() } }
                     )
                 }
-                
-                // Note: BotonSOS is not shown for Police role according to current_plan point 3.
-                // However, the original code had it. I'll remove it if it should be citizen only.
-                // current_plan: 3. [DONE] Restringir el botón SOS exclusivamente a la vista de ciudadano.
-                // Wait, the original code for HomePoliciaScreen HAD BotonSOS. 
-                // I will remove it to follow the plan.
             }
         }
     }

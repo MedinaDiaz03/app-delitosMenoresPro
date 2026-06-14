@@ -35,12 +35,24 @@ class ReporteRepositorio {
 
     suspend fun obtenerReportesPorUsuario(usuarioId: String): List<Reporte> {
         return try {
+            // Intentar con ordenamiento (requiere índice compuesto en Firebase)
             reportesCollection
                 .whereEqualTo("usuarioId", usuarioId)
                 .orderBy("fecha", Query.Direction.DESCENDING)
                 .get().await()
                 .toObjects(Reporte::class.java)
-        } catch (_: Exception) { emptyList() }
+        } catch (e: Exception) {
+            // Fallback: Si el índice no existe, obtenemos sin ordenar y ordenamos en memoria
+            try {
+                reportesCollection
+                    .whereEqualTo("usuarioId", usuarioId)
+                    .get().await()
+                    .toObjects(Reporte::class.java)
+                    .sortedByDescending { it.fecha }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
     }
 
     suspend fun obtenerConteoReportesUsuario(usuarioId: String): Int {
@@ -59,12 +71,14 @@ class ReporteRepositorio {
         reportesCollection.document(reporteId).update("estado", nuevoEstado)
     }
 
-    fun obtenerTodosLosReportes(onResult: (List<Reporte>) -> Unit) {
+    fun escucharReportes(onResult: (List<Reporte>) -> Unit) {
         reportesCollection
-            .orderBy("fecha", Query.Direction.DESCENDING)
-            .get()
-            .addOnSuccessListener { result ->
-                onResult(result.toObjects(Reporte::class.java))
+            .whereEqualTo("estado", "activo")
+            .orderBy("fecha", com.google.firebase.firestore.Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) return@addSnapshotListener
+                val lista = snapshot?.toObjects(Reporte::class.java) ?: emptyList()
+                onResult(lista)
             }
     }
 

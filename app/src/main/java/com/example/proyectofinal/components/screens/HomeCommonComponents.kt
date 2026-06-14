@@ -34,10 +34,12 @@ import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
+import androidx.compose.ui.draw.scale
 import android.widget.Toast
 import com.example.proyectofinal.servicios.FCMHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.*
 
 fun obtenerColorMarker(categoria: String): Float {
     return when (categoria.lowercase()) {
@@ -53,6 +55,89 @@ fun obtenerColorMarker(categoria: String): Float {
 }
 
 @Composable
+fun ControlesMapaCard(
+    mostrarIconos: Boolean,
+    onMostrarIconosChange: (Boolean) -> Unit,
+    soloHoy: Boolean,
+    onSoloHoyChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expandido by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = modifier.width(if (expandido) 180.dp else 44.dp),
+        shape = RoundedCornerShape(if (expandido) 16.dp else 12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBFDBFE)),
+        onClick = { if (!expandido) expandido = true }
+    ) {
+        Column(modifier = Modifier.padding(if (expandido) 12.dp else 10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (expandido) Arrangement.Start else Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    if (expandido) Icons.Default.FilterList else Icons.Default.Tune,
+                    null,
+                    tint = Color(0xFF1E3A8A),
+                    modifier = Modifier.size(if (expandido) 16.dp else 24.dp)
+                )
+                if (expandido) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "Filtros",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color(0xFF1E3A8A),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { expandido = false },
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowUp, null, tint = Color(0xFF64748B))
+                    }
+                }
+            }
+            
+            if (expandido) {
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Iconos", fontSize = 11.sp, color = Color(0xFF334155))
+                    Switch(
+                        checked = mostrarIconos,
+                        onCheckedChange = onMostrarIconosChange,
+                        modifier = Modifier.scale(0.6f),
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF1E3A8A))
+                    )
+                }
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Solo hoy", fontSize = 11.sp, color = Color(0xFF334155))
+                    Switch(
+                        checked = soloHoy,
+                        onCheckedChange = onSoloHoyChange,
+                        modifier = Modifier.scale(0.6f),
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF1E3A8A))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun MapaConReportes(
     reportes: List<Reporte>,
     camaraState: CameraPositionState,
@@ -61,7 +146,8 @@ fun MapaConReportes(
     esPolicia: Boolean,
     marcadoresVisibles: Boolean,
     navController: NavController,
-    userLocation: LatLng? = null
+    userLocation: LatLng? = null,
+    soloHoy: Boolean = false
 ) {
     val context = LocalContext.current
     val liveRepo = remember { LocationShareRepositorio() }
@@ -70,6 +156,21 @@ fun MapaConReportes(
 
     LaunchedEffect(Unit) {
         liveRepo.escuchar { ubicacionesEnVivo = it }
+    }
+
+    val reportesFiltrados = remember(reportes, soloHoy) {
+        if (soloHoy) {
+            val hoy = Calendar.getInstance()
+            reportes.filter { reporte ->
+                reporte.fecha?.let { timestamp ->
+                    val fechaRepo = Calendar.getInstance().apply { time = timestamp.toDate() }
+                    fechaRepo.get(Calendar.YEAR) == hoy.get(Calendar.YEAR) &&
+                    fechaRepo.get(Calendar.DAY_OF_YEAR) == hoy.get(Calendar.DAY_OF_YEAR)
+                } ?: false
+            }
+        } else {
+            reportes
+        }
     }
 
     val propiedadesMapa = MapProperties(
@@ -85,8 +186,8 @@ fun MapaConReportes(
         properties = propiedadesMapa,
         uiSettings = MapUiSettings(myLocationButtonEnabled = false)
     ) {
-        if (!esPolicia || marcadoresVisibles) {
-            RenderMarkers(reportes) { reporteSeleccionado = it }
+        if (marcadoresVisibles) {
+            RenderMarkers(reportesFiltrados) { reporteSeleccionado = it }
         }
 
         ubicacionesEnVivo.forEach { live ->
@@ -173,42 +274,6 @@ fun RenderMarkers(reportes: List<Reporte>, onReporteClick: (Reporte) -> Unit) {
                 }
             )
         }
-    }
-}
-
-@Composable
-fun SecurityStatusCard() {
-    val colores = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier.fillMaxWidth(0.65f),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Mapa de Seguridad", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colores.onSurface)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(colores.primary))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Estado: Seguro", fontSize = 14.sp, color = Color(0xFF1E3A8A))
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { 0.7f },
-                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
-                color = colores.primary,
-                trackColor = colores.outlineVariant
-            )
-        }
-    }
-}
-
-@Composable
-fun FilterChipsRow() {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChipTemplate("Todo", Icons.Default.FilterList, true)
-        FilterChipTemplate("Hospitales", Icons.Default.LocalHospital, false)
-        FilterChipTemplate("Alertas", Icons.Default.Report, false)
     }
 }
 

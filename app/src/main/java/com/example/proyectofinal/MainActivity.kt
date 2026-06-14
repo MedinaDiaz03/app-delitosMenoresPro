@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
                         composable("alerts")        { AlertsScreen(navController) }
                         composable("profile")       { ProfileScreen(navController) }
                         composable("seleccion_rol") { SeleccionRolScreen(navController) }
+                        composable("historial_personal") { HistorialRepoScreen(navController) }
                         composable("historial_repo") { HistorialRepoScreen(navController) }
                         composable("historial_global") { HistorialGlobalScreen(navController) }
 
