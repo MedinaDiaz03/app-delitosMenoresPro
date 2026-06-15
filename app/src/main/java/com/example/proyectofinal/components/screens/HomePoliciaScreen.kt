@@ -24,22 +24,22 @@ import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
+import com.example.proyectofinal.repositorios.LocationShareRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.servicios.NotificationHelper
+import com.example.proyectofinal.util.DistanceUtils
+import com.example.proyectofinal.util.MapConstants
 import coil.compose.AsyncImage
-import com.google.firebase.auth.FirebaseAuth
-
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.firebase.auth.FirebaseAuth
 import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private val CAJAMARCA = LatLng(-7.1638, -78.5001)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -51,6 +51,7 @@ fun HomePoliciaScreen(navController: NavController) {
     val authRepositorio = remember { AutenticacionRepositorio() }
     val reporteRepositorio = remember { ReporteRepositorio() }
     val locationRepositorio = remember { LocationRepositorio(context) }
+    val locationShareRepositorio = remember { LocationShareRepositorio() }
     val userFirebase = remember { FirebaseAuth.getInstance().currentUser }
     val photoUrl = userFirebase?.photoUrl
 
@@ -61,47 +62,41 @@ fun HomePoliciaScreen(navController: NavController) {
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
     var mostrarIconos by remember { mutableStateOf(true) }
     var soloHoy by remember { mutableStateOf(false) }
+    var sosActivo by remember { mutableStateOf(false) }
+    var uidActual by remember { mutableStateOf<String?>(null) }
+
     val idsNotificados = remember { mutableSetOf<String>() }
-
-    val inicioDeHoy = remember {
-        java.util.Calendar.getInstance().apply {
-            set(java.util.Calendar.HOUR_OF_DAY, 0)
-            set(java.util.Calendar.MINUTE, 0)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
-        }.timeInMillis
-    }
-
-    // Animación de parpadeo para los reportes
-    var parpadeoVisible by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            parpadeoVisible = !parpadeoVisible
-            delay(800)
-        }
-    }
 
     val locationPermission = rememberPermissionState(
         android.Manifest.permission.ACCESS_FINE_LOCATION
     )
 
     val camaraState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(CAJAMARCA, 13f)
+        position = CameraPosition.fromLatLngZoom(MapConstants.DEFAULT_LOCATION, 13f)
     }
 
+    // Obtener usuario actual
     LaunchedEffect(Unit) {
         usuario = authRepositorio.obtenerDatosUsuarioActual()
-        
-        // Escuchar reportes en tiempo real
+        uidActual = usuario?.uid
+    }
+
+    // Escuchar reportes
+    LaunchedEffect(Unit) {
         reporteRepositorio.escucharReportes { lista ->
             reportes = lista.filter { it.estado in listOf("en_revision", "activo", "verificado") }
         }
+    }
 
+    // Solicitar permiso de ubicación
+    LaunchedEffect(Unit) {
         if (!locationPermission.status.isGranted) {
             locationPermission.launchPermissionRequest()
         }
+    }
 
-        // Loop de notificaciones para el Policía (2km de radio)
+    // Bucle de notificaciones para policía (cada 30 segundos) - sin cambios
+    LaunchedEffect(Unit) {
         while (true) {
             if (locationPermission.status.isGranted) {
                 val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
@@ -112,11 +107,11 @@ fun HomePoliciaScreen(navController: NavController) {
                     reportes.filter { repo ->
                         val fechaMs = repo.fecha?.toDate()?.time ?: 0L
                         repo.id !in idsNotificados &&
-                        (ahora - fechaMs) <= unDiaEnMillis &&
-                        calcularDistancia(
-                            ubicacionActual.latitude, ubicacionActual.longitude,
-                            repo.latitud, repo.longitud
-                        ) < 2000.0
+                                (ahora - fechaMs) <= unDiaEnMillis &&
+                                DistanceUtils.calcularDistanciaMetros(
+                                    ubicacionActual.latitude, ubicacionActual.longitude,
+                                    repo.latitud, repo.longitud
+                                ) < 2000.0
                     }.forEach { repo ->
                         idsNotificados.add(repo.id)
                         NotificationHelper.mostrarNotificacion(
@@ -128,18 +123,42 @@ fun HomePoliciaScreen(navController: NavController) {
                     }
                 }
             }
-            delay(30000) // Verifica cada 30 segundos
+            delay(30000)
         }
     }
 
+    // Bucle de publicación de ubicación SOLO si SOS está activo (cada 3 segundos)
+    LaunchedEffect(sosActivo, userLocation) {
+        if (sosActivo && userLocation != null && uidActual != null) {
+            while (sosActivo) {
+                locationShareRepositorio.actualizarUbicacion(
+                    uidActual!!,
+                    userLocation!!.latitude,
+                    userLocation!!.longitude
+                )
+                delay(3000)
+            }
+        }
+    }
+
+    // Centrar cámara
     LaunchedEffect(locationPermission.status.isGranted) {
         if (locationPermission.status.isGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
             if (ubicacion != null) {
                 userLocation = LatLng(ubicacion.latitude, ubicacion.longitude)
-                camaraState.animate(
-                    CameraUpdateFactory.newLatLngZoom(userLocation!!, 15f)
-                )
+                camaraState.animate(CameraUpdateFactory.newLatLngZoom(userLocation!!, 15f))
+            }
+        }
+    }
+
+    // Desactivar SOS al salir
+    DisposableEffect(Unit) {
+        onDispose {
+            if (sosActivo && uidActual != null) {
+                scope.launch {
+                    locationShareRepositorio.detenerSos(uidActual!!)
+                }
             }
         }
     }
@@ -156,10 +175,38 @@ fun HomePoliciaScreen(navController: NavController) {
                 )
             } else {
                 Toast.makeText(context, "Buscando señal GPS... Reintentando", Toast.LENGTH_SHORT).show()
-                camaraState.animate(CameraUpdateFactory.newLatLngZoom(CAJAMARCA, 13f))
+                camaraState.animate(CameraUpdateFactory.newLatLngZoom(MapConstants.DEFAULT_LOCATION, 13f))
             }
         } else {
             Toast.makeText(context, "Permiso de ubicación denegado", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    suspend fun activarSos() {
+        val usuarioActual = authRepositorio.obtenerDatosUsuarioActual()
+        val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
+        if (usuarioActual != null && ubicacionActual != null) {
+            val nuevoSOS = Reporte(
+                usuarioId = usuarioActual.uid,
+                usuarioNombre = usuarioActual.nombre,
+                categoria = "sos",
+                descripcion = "ALERTA SOS - POLICÍA",
+                latitud = ubicacionActual.latitude,
+                longitud = ubicacionActual.longitude,
+                estado = "verificado"
+            )
+            reporteRepositorio.enviarReporte(nuevoSOS)
+            Toast.makeText(context, "🚨 SOS ENVIADO (Policía)", Toast.LENGTH_SHORT).show()
+            locationShareRepositorio.iniciarSos(
+                usuarioActual.uid,
+                ubicacionActual.latitude,
+                ubicacionActual.longitude,
+                300000L
+            )
+            sosActivo = true
+            delay(300000)
+            sosActivo = false
+            locationShareRepositorio.detenerSos(usuarioActual.uid)
         }
     }
 
@@ -385,9 +432,10 @@ fun HomePoliciaScreen(navController: NavController) {
                     locationGranted = locationPermission.status.isGranted,
                     mapaOscuro = mapaOscuro,
                     esPolicia = true,
-                    marcadoresVisibles = mostrarIconos && parpadeoVisible,
+                    marcadoresVisibles = marcadoresVisibles && mostrarIconos, // eliminamos parpadeo
                     navController = navController,
                     userLocation = userLocation,
+                    usuarioIdActual = uidActual,
                     soloHoy = soloHoy
                 )
 
@@ -420,6 +468,11 @@ fun HomePoliciaScreen(navController: NavController) {
                         onClick = { scope.launch { volverAMiUbicacion() } }
                     )
                 }
+
+                BotonSOS(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    onSosActivado = { activarSos() }
+                )
             }
         }
     }

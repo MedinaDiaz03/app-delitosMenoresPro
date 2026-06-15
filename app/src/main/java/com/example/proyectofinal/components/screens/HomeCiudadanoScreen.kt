@@ -25,39 +25,22 @@ import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
+import com.example.proyectofinal.repositorios.LocationShareRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.servicios.NotificationHelper
+import com.example.proyectofinal.util.DistanceUtils
+import com.example.proyectofinal.util.MapConstants
 import coil.compose.AsyncImage
-import com.google.firebase.auth.FirebaseAuth
-
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.*
+import com.google.firebase.auth.FirebaseAuth
+import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.*
-
-private val CAJAMARCA = LatLng(-7.1638, -78.5001)
-
-fun calcularDistancia(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val r = 6371e3 // Radio de la Tierra en metros
-    val phi1 = lat1 * PI / 180
-    val phi2 = lat2 * PI / 180
-    val deltaPhi = (lat2 - lat1) * PI / 180
-    val deltaLambda = (lon2 - lon1) * PI / 180
-
-    val a = sin(deltaPhi / 2).pow(2) +
-            cos(phi1) * cos(phi2) *
-            sin(deltaLambda / 2).pow(2)
-    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-
-    return r * c
-}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -69,6 +52,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
     val authRepositorio = remember { AutenticacionRepositorio() }
     val reporteRepositorio = remember { ReporteRepositorio() }
     val locationRepositorio = remember { LocationRepositorio(context) }
+    val locationShareRepositorio = remember { LocationShareRepositorio() }
     val userFirebase = remember { FirebaseAuth.getInstance().currentUser }
     val photoUrl = userFirebase?.photoUrl
 
@@ -78,6 +62,8 @@ fun HomeCiudadanoScreen(navController: NavController) {
     var userLocation by remember { mutableStateOf<LatLng?>(null) }
     var mostrarIconos by remember { mutableStateOf(true) }
     var soloHoy by remember { mutableStateOf(false) }
+    var sosActivo by remember { mutableStateOf(false) }
+    var uidActual by remember { mutableStateOf<String?>(null) }
 
     val prefs = context.getSharedPreferences("ignored_reports", Context.MODE_PRIVATE)
     val idsIgnorados = remember {
@@ -96,22 +82,31 @@ fun HomeCiudadanoScreen(navController: NavController) {
     )
 
     val camaraState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(CAJAMARCA, 13f)
+        position = CameraPosition.fromLatLngZoom(MapConstants.DEFAULT_LOCATION, 13f)
     }
 
+    // Obtener usuario actual y uid
     LaunchedEffect(Unit) {
         usuario = authRepositorio.obtenerDatosUsuarioActual()
-        
-        // Escuchar reportes en tiempo real
+        uidActual = usuario?.uid
+    }
+
+    // Escuchar reportes
+    LaunchedEffect(Unit) {
         reporteRepositorio.escucharReportes { lista ->
             reportes = lista.filter { it.estado in listOf("en_revision", "activo", "verificado") }
         }
+    }
 
+    // Solicitar permisos de ubicación
+    LaunchedEffect(Unit) {
         if (!locationPermissionsState.allPermissionsGranted) {
             locationPermissionsState.launchMultiplePermissionRequest()
         }
+    }
 
-        // Loop de detección de proximidad (50m) y notificaciones (1km)
+    // Bucle de notificaciones por proximidad (cada 30 segundos) - sin cambios
+    LaunchedEffect(Unit) {
         while (true) {
             if (locationPermissionsState.allPermissionsGranted) {
                 val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
@@ -119,33 +114,33 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     val ahora = System.currentTimeMillis()
                     val unDiaEnMillis = 24 * 60 * 60 * 1000L
 
-                    // Modal si hay incidente a menos de 50 metros, de otro usuario y no ignorado
+                    // Modal si hay incidente a menos de 50 metros
                     val cercano = reportes.find { repo ->
                         val fechaMs = repo.fecha.toDate().time
                         repo.id !in idsIgnorados &&
-                        repo.usuarioId != usuario?.uid &&
-                        (ahora - fechaMs) <= unDiaEnMillis &&
-                        calcularDistancia(
-                            ubicacionActual.latitude, ubicacionActual.longitude,
-                            repo.latitud, repo.longitud
-                        ) < 50.0
+                                repo.usuarioId != uidActual &&
+                                (ahora - fechaMs) <= unDiaEnMillis &&
+                                DistanceUtils.calcularDistanciaMetros(
+                                    ubicacionActual.latitude, ubicacionActual.longitude,
+                                    repo.latitud, repo.longitud
+                                ) < 50.0
                     }
-                    if (cercano != null) {
+                    if (cercano != null && !mostrarDialogoProximidad) {
                         reporteCercano = cercano
                         mostrarDialogoProximidad = true
                         idsIgnorados.add(cercano.id)
                         prefs.edit().putStringSet("ids", idsIgnorados.toSet()).apply()
                     }
 
-                    // Notificación sistema para reportes de las ÚLTIMAS 24H dentro de 2km
+                    // Notificaciones para reportes dentro de 2km
                     reportes.filter { repo ->
                         val fechaMs = repo.fecha.toDate().time
                         repo.id !in idsNotificados &&
-                        (ahora - fechaMs) <= unDiaEnMillis &&
-                        calcularDistancia(
-                            ubicacionActual.latitude, ubicacionActual.longitude,
-                            repo.latitud, repo.longitud
-                        ) < 2000.0
+                                (ahora - fechaMs) <= unDiaEnMillis &&
+                                DistanceUtils.calcularDistanciaMetros(
+                                    ubicacionActual.latitude, ubicacionActual.longitude,
+                                    repo.latitud, repo.longitud
+                                ) < 2000.0
                     }.forEach { repo ->
                         idsNotificados.add(repo.id)
                         NotificationHelper.mostrarNotificacion(
@@ -161,12 +156,38 @@ fun HomeCiudadanoScreen(navController: NavController) {
         }
     }
 
+    // Bucle de publicación de ubicación SOLO si SOS está activo (cada 3 segundos)
+    LaunchedEffect(sosActivo, userLocation) {
+        if (sosActivo && userLocation != null && uidActual != null) {
+            while (sosActivo) {
+                locationShareRepositorio.actualizarUbicacion(
+                    uidActual!!,
+                    userLocation!!.latitude,
+                    userLocation!!.longitude
+                )
+                delay(3000)
+            }
+        }
+    }
+
+    // Centrar cámara en ubicación actual al iniciar
     LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
         if (locationPermissionsState.allPermissionsGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
             if (ubicacion != null) {
                 userLocation = LatLng(ubicacion.latitude, ubicacion.longitude)
                 camaraState.animate(CameraUpdateFactory.newLatLngZoom(userLocation!!, 15f))
+            }
+        }
+    }
+
+    // Desactivar SOS al salir de la pantalla
+    DisposableEffect(Unit) {
+        onDispose {
+            if (sosActivo && uidActual != null) {
+                scope.launch {
+                    locationShareRepositorio.detenerSos(uidActual!!)
+                }
             }
         }
     }
@@ -183,10 +204,41 @@ fun HomeCiudadanoScreen(navController: NavController) {
                 )
             } else {
                 Toast.makeText(context, "Buscando señal GPS... Reintentando", Toast.LENGTH_SHORT).show()
-                camaraState.animate(CameraUpdateFactory.newLatLngZoom(CAJAMARCA, 13f))
+                camaraState.animate(CameraUpdateFactory.newLatLngZoom(MapConstants.DEFAULT_LOCATION, 13f))
             }
         } else {
             Toast.makeText(context, "Permiso de ubicación denegado", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Función para activar SOS (crear reporte y publicar ubicación)
+    suspend fun activarSos() {
+        val usuarioActual = authRepositorio.obtenerDatosUsuarioActual()
+        val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
+        if (usuarioActual != null && ubicacionActual != null) {
+            val nuevoSOS = Reporte(
+                usuarioId = usuarioActual.uid,
+                usuarioNombre = usuarioActual.nombre,
+                categoria = "sos",
+                descripcion = "ALERTA SOS",
+                latitud = ubicacionActual.latitude,
+                longitud = ubicacionActual.longitude,
+                estado = "verificado"
+            )
+            reporteRepositorio.enviarReporte(nuevoSOS)
+            Toast.makeText(context, "🚨 SOS ENVIADO", Toast.LENGTH_SHORT).show()
+            // Activar publicación de ubicación por 5 minutos
+            locationShareRepositorio.iniciarSos(
+                usuarioActual.uid,
+                ubicacionActual.latitude,
+                ubicacionActual.longitude,
+                300000L
+            )
+            sosActivo = true
+            // Programar desactivación automática después de 5 minutos
+            delay(300000)
+            sosActivo = false
+            locationShareRepositorio.detenerSos(usuarioActual.uid)
         }
     }
 
@@ -403,6 +455,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     marcadoresVisibles = mostrarIconos,
                     navController = navController,
                     userLocation = userLocation,
+                    usuarioIdActual = uidActual,
                     soloHoy = soloHoy
                 )
 
@@ -436,16 +489,19 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     )
                 }
 
-                BotonSOS(modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp))
+                BotonSOS(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    onSosActivado = { activarSos() }
+                )
 
-                // Modal de incidente activo a 50 metros (solo reportes de otros usuarios)
+                // Modal de incidente activo a 50 metros
                 if (mostrarDialogoProximidad && reporteCercano != null) {
                     AlertDialog(
                         onDismissRequest = { mostrarDialogoProximidad = false },
                         icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE04F5F)) },
                         title = { Text("Incidente activo cerca", fontWeight = FontWeight.Bold) },
                         text = {
-                            Text("Hay un reporte de '${reporteCercano?.categoria?.uppercase()}' a menos de 40 metros de tu ubicación. ¿Deseas verlo?")
+                            Text("Hay un reporte de '${reporteCercano?.categoria?.uppercase()}' a menos de 50 metros de tu ubicación. ¿Deseas verlo?")
                         },
                         confirmButton = {
                             Button(

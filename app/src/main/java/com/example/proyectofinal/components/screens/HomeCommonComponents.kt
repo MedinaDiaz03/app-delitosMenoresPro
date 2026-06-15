@@ -30,6 +30,7 @@ import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
 import com.example.proyectofinal.repositorios.LocationShareRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
+import com.example.proyectofinal.util.DistanceUtils
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
@@ -144,6 +145,7 @@ fun MapaConReportes(
     marcadoresVisibles: Boolean,
     navController: NavController,
     userLocation: LatLng? = null,
+    usuarioIdActual: String? = null,
     soloHoy: Boolean = false
 ) {
     val context = LocalContext.current
@@ -155,6 +157,17 @@ fun MapaConReportes(
         liveRepo.escuchar { ubicacionesEnVivo = it }
     }
 
+    // Filtrar ubicaciones en vivo: solo mostrar de otros usuarios a menos de 100 metros
+    val ubicacionesFiltradas = remember(userLocation, ubicacionesEnVivo, usuarioIdActual) {
+        if (userLocation == null || usuarioIdActual == null) return@remember emptyList()
+        ubicacionesEnVivo.filter { live ->
+            live.usuarioId != usuarioIdActual && DistanceUtils.calcularDistanciaMetros(
+                userLocation.latitude, userLocation.longitude,
+                live.latitud, live.longitud
+            ) < 100.0
+        }
+    }
+
     val reportesFiltrados = remember(reportes, soloHoy) {
         if (soloHoy) {
             val hoy = Calendar.getInstance()
@@ -162,7 +175,7 @@ fun MapaConReportes(
                 reporte.fecha?.let { timestamp ->
                     val fechaRepo = Calendar.getInstance().apply { time = timestamp.toDate() }
                     fechaRepo.get(Calendar.YEAR) == hoy.get(Calendar.YEAR) &&
-                    fechaRepo.get(Calendar.DAY_OF_YEAR) == hoy.get(Calendar.DAY_OF_YEAR)
+                            fechaRepo.get(Calendar.DAY_OF_YEAR) == hoy.get(Calendar.DAY_OF_YEAR)
                 } ?: false
             }
         } else {
@@ -187,12 +200,13 @@ fun MapaConReportes(
             RenderMarkers(reportesFiltrados) { reporteSeleccionado = it }
         }
 
-        ubicacionesEnVivo.forEach { live ->
+        ubicacionesFiltradas.forEach { live ->
             Marker(
                 state = MarkerState(position = LatLng(live.latitud, live.longitud)),
-                title = "Usuario en movimiento",
+                title = "Persona en estado SOS",
+                snippet = "Ubicación activa por emergencia",
                 icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
-                alpha = 0.8f
+                alpha = 0.9f
             )
         }
     }
@@ -200,7 +214,7 @@ fun MapaConReportes(
     // Dialog al hacer clic en un marcador
     reporteSeleccionado?.let { reporte ->
         val distanciaText = if (userLocation != null) {
-            val metros = calcularDistanciaInterna(
+            val metros = DistanceUtils.calcularDistanciaMetros(
                 userLocation.latitude, userLocation.longitude,
                 reporte.latitud, reporte.longitud
             ).toInt()
@@ -275,35 +289,6 @@ fun RenderMarkers(reportes: List<Reporte>, onReporteClick: (Reporte) -> Unit) {
 }
 
 @Composable
-fun FilterChipTemplate(text: String, icon: ImageVector, isSelected: Boolean) {
-    val colores = MaterialTheme.colorScheme
-    Surface(
-        color = if (isSelected) colores.primary else colores.surface,
-        shape = RoundedCornerShape(20.dp),
-        shadowElevation = 2.dp,
-        border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, colores.outlineVariant) else null
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = if (isSelected) Color.White else Color(0xFF1E3A8A)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = text,
-                fontSize = 12.sp,
-                color = if (isSelected) Color.White else Color(0xFF1E3A8A)
-            )
-        }
-    }
-}
-
-@Composable
 fun MapActionButton(icon: ImageVector, onClick: () -> Unit = {}) {
     val colores = MaterialTheme.colorScheme
     Surface(
@@ -321,25 +306,25 @@ fun MapActionButton(icon: ImageVector, onClick: () -> Unit = {}) {
 }
 
 @Composable
-fun BotonSOS(modifier: Modifier = Modifier) {
+fun BotonSOS(
+    modifier: Modifier = Modifier,
+    onSosActivado: suspend () -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val authRepo = remember { AutenticacionRepositorio() }
-    val reportRepo = remember { ReporteRepositorio() }
-    val locationRepo = remember { LocationRepositorio(context) }
+    var mostrandoDialogo by remember { mutableStateOf(false) }
 
-    var mostrarDialogo by remember { mutableStateOf(false) }
-
-    if (mostrarDialogo) {
+    // Diálogo de confirmación de llamada (opcional, pero lo dejamos por si el usuario quiere)
+    if (mostrandoDialogo) {
         AlertDialog(
-            onDismissRequest = { mostrarDialogo = false },
+            onDismissRequest = { mostrandoDialogo = false },
             icon = { Icon(Icons.Default.LocalPolice, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(36.dp)) },
             title = { Text("¿Llamar a emergencias?", fontWeight = FontWeight.Bold) },
-            text  = { Text("Se marcará el número 105 (Policía Nacional del Perú). ¿Confirmas la llamada?") },
+            text = { Text("Se marcará el número 105 (Policía Nacional del Perú). ¿Confirmas la llamada?") },
             confirmButton = {
                 Button(
                     onClick = {
-                        mostrarDialogo = false
+                        mostrandoDialogo = false
                         val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:105"))
                         context.startActivity(intent)
                     },
@@ -349,7 +334,7 @@ fun BotonSOS(modifier: Modifier = Modifier) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { mostrarDialogo = false }) { Text("Cancelar") }
+                TextButton(onClick = { mostrandoDialogo = false }) { Text("Cancelar") }
             }
         )
     }
@@ -360,25 +345,19 @@ fun BotonSOS(modifier: Modifier = Modifier) {
             .size(72.dp)
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { mostrarDialogo = true },
+                    onTap = {
+                        // Toque corto: muestra el diálogo de llamada (opcional, pero lo mantenemos)
+                        mostrandoDialogo = true
+                    },
                     onPress = {
+                        // Mantener presionado 3 segundos -> activar SOS + llamar automáticamente
                         val job = scope.launch {
                             delay(3000)
-                            val usuario = authRepo.obtenerDatosUsuarioActual()
-                            val ubicacion = locationRepo.obtenerUbicacionActual()
-                            if (usuario != null && ubicacion != null) {
-                                val nuevoSOS = Reporte(
-                                    usuarioId = usuario.uid,
-                                    usuarioNombre = usuario.nombre,
-                                    categoria = "sos",
-                                    descripcion = "ALERTA SOS",
-                                    latitud = ubicacion.latitude,
-                                    longitud = ubicacion.longitude,
-                                    estado = "verificado"
-                                )
-                                reportRepo.enviarReporte(nuevoSOS)
-                                Toast.makeText(context, "🚨 SOS ENVIADO", Toast.LENGTH_SHORT).show()
-                            }
+                            // 1. Activar SOS (reporte + ubicación visible)
+                            onSosActivado()
+                            // 2. Llamar al 105 (sin diálogo adicional, acción directa)
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:105"))
+                            context.startActivity(intent)
                         }
                         try { awaitRelease() } finally { job.cancel() }
                     }
@@ -395,17 +374,4 @@ fun BotonSOS(modifier: Modifier = Modifier) {
             Text("SOS", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
         }
     }
-}
-
-private fun calcularDistanciaInterna(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-    val r = 6371e3
-    val p1 = Math.toRadians(lat1)
-    val p2 = Math.toRadians(lat2)
-    val dp = Math.toRadians(lat2 - lat1)
-    val dl = Math.toRadians(lon2 - lon1)
-    val a = Math.sin(dp / 2) * Math.sin(dp / 2) +
-            Math.cos(p1) * Math.cos(p2) *
-            Math.sin(dl / 2) * Math.sin(dl / 2)
-    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return r * c
 }
