@@ -18,35 +18,19 @@ object NotificationHelper {
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = context.getSystemService(NotificationManager::class.java)
-
-            // 1. Canal para el Servicio de Ubicación (Prioridad Baja)
-            val locationChannel = NotificationChannel(
+            val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Canal para el servicio de monitoreo de ubicación"
-                setShowBadge(false)
+                description = "Canal para el servicio de monitoreo de ubicación en segundo plano"
             }
-
-            // 2. Canal para Alertas de Seguridad (Prioridad Alta)
-            val alertChannel = NotificationChannel(
-                "alertas_inmediatas",
-                "Alertas de Seguridad",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Notificaciones de incidentes en tiempo real"
-                enableVibration(true)
-            }
-
-            manager.createNotificationChannel(locationChannel)
-            manager.createNotificationChannel(alertChannel)
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
         }
     }
 
     fun getForegroundNotification(context: Context, mensaje: String = "Monitoreando ubicación..."): NotificationCompat.Builder {
-        // ... (sin cambios)
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("App Delitos Menores")
             .setContentText(mensaje)
@@ -59,15 +43,26 @@ object NotificationHelper {
         val alertChannelId = "alertas_inmediatas"
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Crear el Intent para abrir la App (Corregido para evitar reinicio a Home)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                alertChannelId,
+                "Alertas de Seguridad",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notificaciones de incidentes en tiempo real"
+            }
+            manager.createNotificationChannel(channel)
+        }
+
+        // Crear el Intent para abrir la App
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("reporteId", reporteId)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("reporteId", reporteId) // Pasamos el ID del reporte
         }
 
         val pendingIntent = PendingIntent.getActivity(
-            context,
-            System.currentTimeMillis().toInt(), // RequestCode único para no sobrescribir intents
+            context, 
+            0, 
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -75,9 +70,9 @@ object NotificationHelper {
         val notification = NotificationCompat.Builder(context, alertChannelId)
             .setContentTitle(titulo)
             .setContentText(mensaje)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(pendingIntent) // Acción al hacer clic
             .setAutoCancel(true)
             .build()
 

@@ -169,29 +169,6 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                Text(
-                    text = "¿Olvidaste tu contraseña?",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable {
-                        if (correo.isBlank()) {
-                            correoError = "Ingresa tu correo para recuperar"
-                        } else if (!correo.lowercase().endsWith("@gmail.com")) {
-                            correoError = "Ingresa un correo @gmail.com válido"
-                        } else {
-                            alcanceCorrutina.launch {
-                                val resultado = repositorio.recuperarContrasena(correo)
-                                if (resultado.isSuccess) {
-                                    Toast.makeText(contexto, "Correo de recuperación enviado", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(contexto, "Error al enviar correo", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                    }
-                )
-            }
 
             Spacer(modifier = Modifier.height(28.dp))
 

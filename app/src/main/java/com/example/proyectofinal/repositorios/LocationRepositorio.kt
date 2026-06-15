@@ -15,6 +15,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.core.content.ContextCompat
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 
 
 
@@ -49,10 +50,24 @@ class LocationRepositorio(context: Context) {
         firestore.collection("ubicaciones").document(userId).collection("historial").add(data)
     }
 
-    // Método auxiliar para actualizar dirección (opcional)
     suspend fun actualizarDireccionDeUltimaUbicacion(location: Location, direccion: String?) {
-        // Implementación simple: podrías guardar la ubicación otra vez con la dirección actualizada
-        guardarUbicacion(location, direccion)
+        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        try {
+            val snapshot = firestore.collection("ubicaciones")
+                .document(userId)
+                .collection("historial")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .limit(1)
+                .get()
+                .await()
+            val docId = snapshot.documents.firstOrNull()?.id ?: return
+            firestore.collection("ubicaciones")
+                .document(userId)
+                .collection("historial")
+                .document(docId)
+                .update("direccion", direccion)
+                .await()
+        } catch (_: Exception) {}
     }
     @SuppressLint("MissingPermission")
     suspend fun obtenerUbicacionActual(): Location? {

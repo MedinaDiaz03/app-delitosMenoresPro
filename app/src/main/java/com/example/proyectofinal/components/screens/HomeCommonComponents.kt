@@ -98,10 +98,10 @@ fun ControlesMapaCard(
                     }
                 }
             }
-            
+
             if (expandido) {
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -115,7 +115,7 @@ fun ControlesMapaCard(
                         colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF1E3A8A))
                     )
                 }
-                
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -374,7 +374,7 @@ fun BotonSOS(modifier: Modifier = Modifier) {
                                     descripcion = "ALERTA SOS",
                                     latitud = ubicacion.latitude,
                                     longitud = ubicacion.longitude,
-                                    estado = "en_revision"
+                                    estado = "verificado"
                                 )
                                 reportRepo.enviarReporte(nuevoSOS)
                                 Toast.makeText(context, "🚨 SOS ENVIADO", Toast.LENGTH_SHORT).show()
