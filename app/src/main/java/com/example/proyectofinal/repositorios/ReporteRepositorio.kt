@@ -82,67 +82,77 @@ class ReporteRepositorio {
             }
     }
 
-    suspend fun validarComoPolicia(reporteId: String, esReal: Boolean): Result<Boolean> {
-        return try {
-            val nuevoEstado = if (esReal) "verificado" else "falso"
-            reportesCollection.document(reporteId).update("estado", nuevoEstado).await()
-            Result.success(true)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    // ── VOTACIÓN (sistema unificado) ──────────────────────────────────────────
 
-    // ── VALIDACIONES ──────────────────────────────────────────────────────────
-
-    suspend fun registrarValidacion(
+    suspend fun agregarVoto(
         reporteId: String,
         usuarioId: String,
-        esReal: Boolean
+        voto: Boolean,        // true = real, false = falsa alarma
+        esPolicia: Boolean
     ): Result<String> {
         return try {
-            if (usuarioId.isBlank()) return Result.failure(Exception("Usuario no autenticado"))
+            // Leer estado actual del reporte
+            val reporteDoc = reportesCollection.document(reporteId).get().await()
+            val reporte = reporteDoc.toObject(Reporte::class.java)
+                ?: return Result.failure(Exception("Reporte no encontrado"))
 
+            // Guard ciudadano: solo en_revision o activo (legacy)
+            if (!esPolicia && reporte.estado !in listOf("en_revision", "activo"))
+                return Result.failure(Exception("Este reporte ya no acepta votos ciudadanos"))
+
+            // Guard ciudadano: no después de que haya votado un policía
+            if (!esPolicia && reporte.policiaHaVotado)
+                return Result.failure(Exception("Reporte cerrado por autoridad. No se aceptan más votos."))
+
+            // Guard: sin votos duplicados
             val docId = "${reporteId}_${usuarioId}"
+            if (db.collection("validaciones").document(docId).get().await().exists())
+                return Result.failure(Exception("Ya has votado en este reporte"))
 
-            // PASO 1: Guardar la validación. Esto DEBE funcionar si las reglas permiten
-            // crear documentos en la colección "validaciones" donde el ID contiene el UID del usuario.
+            // Guardar la validación
             db.collection("validaciones").document(docId).set(
                 mapOf(
                     "id" to docId,
                     "reporteId" to reporteId,
                     "usuarioId" to usuarioId,
-                    "esReal" to esReal,
-                    "fecha" to Timestamp.now()
+                    "voto" to voto,
+                    "esPolicia" to esPolicia,
+                    "timestamp" to Timestamp.now()
                 )
             ).await()
 
-            // PASO 2: Intentar actualizar contadores. Si las reglas de Firebase deniegan
-            // el acceso (PERMISSION_DENIED) porque el usuario no es dueño del reporte,
-            // atrapamos el error y devolvemos éxito. Tu voto ya se guardó arriba.
-            try {
-                val campo = if (esReal) "validacionesCount" else "rechazosCount"
-                reportesCollection.document(reporteId).update(campo, FieldValue.increment(1)).await()
+            if (esPolicia) {
+                // Voto de autoridad: cambio inmediato e irreversible
+                val nuevoEstado = if (voto) "verificado" else "falso"
+                reportesCollection.document(reporteId).update(
+                    mapOf(
+                        "estado" to nuevoEstado,
+                        "policiaHaVotado" to true,
+                        "estadoFinalPorPolicia" to nuevoEstado
+                    )
+                ).await()
+            } else {
+                // Voto ciudadano: incrementar contadores
+                val campoVoto = if (voto) "votosReales" else "votosFalsos"
+                reportesCollection.document(reporteId).update(
+                    mapOf(
+                        "totalVotosCiudadanos" to FieldValue.increment(1),
+                        campoVoto to FieldValue.increment(1)
+                    )
+                ).await()
 
-                val reporteDoc = reportesCollection.document(reporteId).get().await()
-                val validaciones = reporteDoc.getLong("validacionesCount")?.toInt() ?: 0
-                val rechazos = reporteDoc.getLong("rechazosCount")?.toInt() ?: 0
-                val estadoActual = reporteDoc.getString("estado") ?: "activo"
-
-                if (estadoActual == "activo") {
-                    when {
-                        validaciones >= 3 -> {
-                            reportesCollection.document(reporteId).update("estado", "verificado").await()
-                            ajustarConfianzaValidadores(reporteId, votaronReal = true, delta = 2)
-                        }
-                        rechazos >= 3 -> {
-                            reportesCollection.document(reporteId).update("estado", "falso").await()
-                            ajustarConfianzaValidadores(reporteId, votaronReal = false, delta = -2)
-                        }
-                    }
+                // Re-leer para verificar si se alcanzó el umbral
+                val updated = reportesCollection.document(reporteId).get().await()
+                    .toObject(Reporte::class.java)
+                if (updated != null
+                    && updated.totalVotosCiudadanos >= 3
+                    && !updated.policiaHaVotado
+                    && updated.estado in listOf("en_revision", "activo")
+                ) {
+                    val nuevoEstado = if (updated.votosReales > updated.votosFalsos) "verificado" else "falso"
+                    reportesCollection.document(reporteId).update("estado", nuevoEstado).await()
+                    ajustarConfianzaValidadores(reporteId, votaronReal = (nuevoEstado == "verificado"), delta = 2)
                 }
-            } catch (e: Exception) {
-                // Ignorar fallos de permisos al actualizar el documento de otra persona
-                android.util.Log.w("ReporteRepositorio", "No se pudo actualizar contador por seguridad, pero voto guardado: ${e.message}")
             }
 
             Result.success("ok")
@@ -165,12 +175,11 @@ class ReporteRepositorio {
         delta: Int
     ) {
         try {
-            // Query por un solo campo (sin índice compuesto), filtramos esReal en código
             val docs = db.collection("validaciones")
                 .whereEqualTo("reporteId", reporteId)
                 .get().await()
             docs.documents
-                .filter { it.getBoolean("esReal") == votaronReal }
+                .filter { it.getBoolean("esReal") == votaronReal || it.getBoolean("voto") == votaronReal }
                 .forEach { doc ->
                     val uid = doc.getString("usuarioId") ?: return@forEach
                     db.collection("usuarios").document(uid)
@@ -184,7 +193,7 @@ class ReporteRepositorio {
     suspend fun obtenerReportesEnRadio(lat: Double, lng: Double, radioMetros: Double = 1000.0): List<Reporte> {
         return try {
             val todos = reportesCollection
-                .whereEqualTo("estado", "activo")
+                .whereIn("estado", listOf("en_revision", "activo", "verificado"))
                 .orderBy("fecha", Query.Direction.DESCENDING)
                 .limit(200)
                 .get().await()
