@@ -39,7 +39,7 @@ object NotificationHelper {
             .setOngoing(true)
     }
 
-    fun mostrarNotificacion(context: Context, titulo: String, mensaje: String, reporteId: String? = null) {
+    fun mostrarNotificacion(context: Context, titulo: String, mensaje: String, reporteId: String? = null, lat: Double? = null, lng: Double? = null) {
         val alertChannelId = "alertas_inmediatas"
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -57,7 +57,11 @@ object NotificationHelper {
         // Crear el Intent para abrir la App
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("reporteId", reporteId) // Pasamos el ID del reporte
+            putExtra("reporteId", reporteId)
+            if (lat != null && lng != null) {
+                putExtra("sos_lat", lat)
+                putExtra("sos_lng", lng)
+            }
         }
 
         val pendingIntent = PendingIntent.getActivity(

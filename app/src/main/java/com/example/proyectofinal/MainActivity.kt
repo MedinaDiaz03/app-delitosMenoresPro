@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.material3.Surface
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -26,11 +27,25 @@ import androidx.compose.runtime.LaunchedEffect
 import com.example.proyectofinal.components.screens.*
 import com.example.proyectofinal.helpers.RolHelper
 import com.example.proyectofinal.ui.theme.ProyectoFinalTheme
+import com.example.proyectofinal.viewmodels.MapCenteringViewModel
+import com.google.android.gms.maps.model.LatLng
 
 class MainActivity : ComponentActivity() {
+
+    private val mapCenteringViewModel: MapCenteringViewModel by viewModels()
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
-        setIntent(intent) // Actualiza el intent para que LaunchedEffect lo detecte
+        setIntent(intent)
+        handleSosIntent(intent)
+    }
+
+    private fun handleSosIntent(i: android.content.Intent) {
+        val lat = if (i.hasExtra("sos_lat")) i.getDoubleExtra("sos_lat", 0.0) else null
+        val lng = if (i.hasExtra("sos_lng")) i.getDoubleExtra("sos_lng", 0.0) else null
+        if (lat != null && lng != null) {
+            mapCenteringViewModel.emitCenter(LatLng(lat, lng))
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,14 +57,13 @@ class MainActivity : ComponentActivity() {
                 Surface {
                     val navController = rememberNavController()
 
-                    // Lógica para capturar el click de la notificación
+                    // Capturar click de notificación al arrancar la Activity
                     LaunchedEffect(intent) {
                         val reporteId = intent.getStringExtra("reporteId")
                         if (!reporteId.isNullOrEmpty()) {
-                            // Navegamos al detalle. Usamos "home" primero para asegurar que
-                            // el flujo de autenticación se procese si es necesario.
                             navController.navigate("report_detail/$reporteId")
                         }
+                        handleSosIntent(intent)
                     }
 
                     NavHost(navController = navController, startDestination = "login") {

@@ -3,6 +3,7 @@ package com.example.proyectofinal.components.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -30,6 +31,7 @@ import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.LocationRepositorio
 import com.example.proyectofinal.repositorios.LocationShareRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
+import com.example.proyectofinal.servicios.NotificationHelper
 import com.example.proyectofinal.util.DistanceUtils
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
@@ -159,12 +161,32 @@ fun MapaConReportes(
 
     // Filtrar ubicaciones en vivo: solo mostrar de otros usuarios a menos de 100 metros
     val ubicacionesFiltradas = remember(userLocation, ubicacionesEnVivo, usuarioIdActual) {
-        if (userLocation == null || usuarioIdActual == null) return@remember emptyList()
+        if (userLocation == null || usuarioIdActual == null) return@remember emptyList<LocationShare>()
         ubicacionesEnVivo.filter { live ->
             live.usuarioId != usuarioIdActual && DistanceUtils.calcularDistanciaMetros(
                 userLocation.latitude, userLocation.longitude,
                 live.latitud, live.longitud
             ) < 100.0
+        }
+    }
+
+    // IDs de SOS ya notificados (persiste mientras el composable está en el árbol)
+    val sosNotificados = remember { mutableSetOf<String>() }
+
+    // Notificación única por cada nuevo SOS que entre al radio de 100 m
+    LaunchedEffect(ubicacionesFiltradas) {
+        ubicacionesFiltradas.forEach { live ->
+            if (live.usuarioId !in sosNotificados) {
+                sosNotificados.add(live.usuarioId)
+                NotificationHelper.mostrarNotificacion(
+                    context,
+                    "ALERTA SOS - Persona necesita ayuda",
+                    "Un usuario ha activado una alerta SOS muy cerca de ti. Acude a ayudar si es seguro.",
+                    null,
+                    lat = live.latitud,
+                    lng = live.longitud
+                )
+            }
         }
     }
 
@@ -203,18 +225,44 @@ fun MapaConReportes(
         ubicacionesFiltradas.forEach { live ->
             key(live.usuarioId) {
                 val markerState = rememberMarkerState(position = LatLng(live.latitud, live.longitud))
-                
-                // Actualizar posición si cambia en Firebase sin recrear el marcador
+
                 LaunchedEffect(live.latitud, live.longitud) {
                     markerState.position = LatLng(live.latitud, live.longitud)
                 }
+
+                val pulso = rememberInfiniteTransition(label = "sos_pulso_${live.usuarioId}")
+                val radioAnim by pulso.animateFloat(
+                    initialValue = 5f,
+                    targetValue = 90f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1400, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "sos_radio"
+                )
+                val alphaAnim by pulso.animateFloat(
+                    initialValue = 0.55f,
+                    targetValue = 0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1400, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "sos_alpha"
+                )
+
+                Circle(
+                    center = LatLng(live.latitud, live.longitud),
+                    radius = radioAnim.toDouble(),
+                    fillColor = Color(1f, 0.1f, 0.1f, alphaAnim * 0.35f),
+                    strokeColor = Color(1f, 0.1f, 0.1f, alphaAnim),
+                    strokeWidth = 3f
+                )
 
                 Marker(
                     state = markerState,
                     title = "Persona en estado SOS",
                     snippet = "Ubicación activa por emergencia",
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
-                    alpha = 0.9f
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
                 )
             }
         }

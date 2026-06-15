@@ -32,7 +32,9 @@ import com.example.proyectofinal.repositorios.ReporteRepositorio
 import com.example.proyectofinal.servicios.NotificationHelper
 import com.example.proyectofinal.util.DistanceUtils
 import com.example.proyectofinal.util.MapConstants
+import com.example.proyectofinal.viewmodels.MapCenteringViewModel
 import coil.compose.AsyncImage
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -51,6 +53,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
     val colores = MaterialTheme.colorScheme
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val mapCenteringViewModel: MapCenteringViewModel = viewModel()
     val authRepositorio = remember { AutenticacionRepositorio() }
     val reporteRepositorio = remember { ReporteRepositorio() }
     val locationRepositorio = remember { LocationRepositorio(context) }
@@ -180,6 +183,13 @@ fun HomeCiudadanoScreen(navController: NavController) {
                 }
                 delay(3000)
             }
+        }
+    }
+
+    // Centrar mapa cuando se hace clic en una notificación SOS
+    LaunchedEffect(Unit) {
+        mapCenteringViewModel.centerEvent.collect { latLng ->
+            camaraState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 17f))
         }
     }
 
@@ -494,7 +504,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
                 }
 
                 BotonSOS(
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 100.dp, end = 16.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 120.dp, end = 16.dp),
                     isActive = sosActivo,
                     onSosActivado = { activarSos() },
                     onLongPressComplete = { showCallDialog = true }
