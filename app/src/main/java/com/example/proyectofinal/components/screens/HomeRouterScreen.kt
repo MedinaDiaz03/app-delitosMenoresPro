@@ -29,8 +29,18 @@ fun HomeRouterScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         usuario = authRepositorio.obtenerDatosUsuarioActual()
         
-        // 1. Programar Notificación Diaria (Siempre para usuarios logueados)
-        if (usuario != null) {
+        if (usuario == null) {
+            // Si no hay sesión, al login
+            navController.navigate("login") {
+                popUpTo("home") { inclusive = true }
+            }
+        } else if (usuario?.rol.isNullOrBlank()) {
+            // Si hay sesión pero NO tiene rol, a elegir uno
+            navController.navigate("seleccion_rol") {
+                popUpTo("home") { inclusive = true }
+            }
+        } else {
+            // 1. Programar Notificación Diaria (Solo si ya está todo ok)
             val workRequest = PeriodicWorkRequestBuilder<NotificacionDiariaWorker>(
                 1, TimeUnit.DAYS
             ).build()
@@ -44,12 +54,10 @@ fun HomeRouterScreen(navController: NavController) {
             // 2. Pedir Permisos necesarios
             val permisos = mutableListOf<String>()
             
-            // Permiso de Notificaciones (Android 13+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 permisos.add(android.Manifest.permission.POST_NOTIFICATIONS)
             }
             
-            // Permiso de Ubicación
             permisos.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
             permisos.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
 
@@ -72,7 +80,13 @@ fun HomeRouterScreen(navController: NavController) {
     } else {
         when (usuario?.rol) {
             "policia" -> HomePoliciaScreen(navController)
-            else -> HomeCiudadanoScreen(navController)
+            "ciudadano" -> HomeCiudadanoScreen(navController)
+            else -> {
+                // En caso de que el rol sea nulo o vacío durante la carga inicial
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
         }
     }
 }

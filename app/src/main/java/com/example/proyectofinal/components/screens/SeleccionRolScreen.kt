@@ -24,12 +24,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.example.proyectofinal.helpers.RolHelper
+import com.example.proyectofinal.repositorios.AutenticacionRepositorio
+import kotlinx.coroutines.launch
 
 @Composable
 fun SeleccionRolScreen(navController: NavController) {
     val context = LocalContext.current
-    val rolHelper = remember { RolHelper() }
+    val repositorio = remember { AutenticacionRepositorio() }
+    val alcanceCorrutina = rememberCoroutineScope()
 
     var rolSeleccionado by remember { mutableStateOf<String?>(null) }
     var codigo by remember { mutableStateOf("") }
@@ -86,9 +88,14 @@ fun SeleccionRolScreen(navController: NavController) {
                     seleccionado = rolSeleccionado == "ciudadano",
                     onClick = {
                         rolSeleccionado = "ciudadano"
-                        rolHelper.setRolCiudadano(context) {
-                            navController.navigate("home") {
-                                popUpTo("seleccion_rol") { inclusive = true }
+                        alcanceCorrutina.launch {
+                            val resultado = repositorio.actualizarRol("ciudadano")
+                            if (resultado.isSuccess) {
+                                navController.navigate("home") {
+                                    popUpTo("seleccion_rol") { inclusive = true }
+                                }
+                            } else {
+                                Toast.makeText(context, "Error al guardar rol", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
@@ -165,9 +172,16 @@ fun SeleccionRolScreen(navController: NavController) {
                                 Toast.makeText(context, "Código incorrecto", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
-                            rolHelper.validarCodigoPolicia(context, codigo) {
-                                navController.navigate("home") {
-                                    popUpTo("seleccion_rol") { inclusive = true }
+                            
+                            alcanceCorrutina.launch {
+                                val resultado = repositorio.actualizarRol("policia", verificado = true)
+                                if (resultado.isSuccess) {
+                                    Toast.makeText(context, "Ahora eres policía ✅", Toast.LENGTH_SHORT).show()
+                                    navController.navigate("home") {
+                                        popUpTo("seleccion_rol") { inclusive = true }
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Error al validar código", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },

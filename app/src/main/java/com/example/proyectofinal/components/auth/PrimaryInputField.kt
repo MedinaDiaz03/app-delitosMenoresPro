@@ -73,6 +73,8 @@ fun PrimaryInputField(
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.Black,
+                unfocusedTextColor = Color.Black,
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = Color(0xFFCBD5E1),
                 errorBorderColor = MaterialTheme.colorScheme.error,
@@ -84,7 +86,7 @@ fun PrimaryInputField(
                 unfocusedContainerColor = Color.White,
                 errorContainerColor = Color(0xFFFFF5F5)
             ),
-            textStyle = MaterialTheme.typography.bodyLarge
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.Black)
         )
 
         if (hasError) {

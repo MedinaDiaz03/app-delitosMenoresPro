@@ -21,12 +21,27 @@ import com.example.proyectofinal.components.auth.*
 import com.example.proyectofinal.modelos.Usuario
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import kotlinx.coroutines.launch
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.*
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.*
 
 @Composable
 fun RegisterScreen(navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repositorio = remember { AutenticacionRepositorio() }
+
+    val auth = FirebaseAuth.getInstance()
+    val gso = remember {
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken("738190982265-r5q3tl92qurcgqn362ds9acghn1pist3.apps.googleusercontent.com")
+            .requestEmail()
+            .build()
+    }
+    val googleSignInClient = remember { GoogleSignIn.getClient(context, gso) }
 
     var nombreCompleto by remember { mutableStateOf("") }
     var correo by remember { mutableStateOf("") }
@@ -42,6 +57,52 @@ fun RegisterScreen(navController: NavController) {
     var confirmPasswordError by remember { mutableStateOf<String?>(null) }
     var codigoError by remember { mutableStateOf<String?>(null) }
     var terminosError by remember { mutableStateOf(false) }
+
+    fun firebaseAuthWithGoogle(idToken: String) {
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        auth.signInWithCredential(credential)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    scope.launch {
+                        val usuario = repositorio.asegurarUsuarioEnFirestore()
+                        isLoading = false
+                        Toast.makeText(context, "Bienvenido: ${auth.currentUser?.displayName}", Toast.LENGTH_SHORT).show()
+                        
+                        if (usuario != null && !usuario.rol.isNullOrBlank()) {
+                            navController.navigate("home") {
+                                popUpTo("register") { inclusive = true }
+                                popUpTo("login") { inclusive = true }
+                            }
+                        } else {
+                            navController.navigate("seleccion_rol") {
+                                popUpTo("register") { inclusive = true }
+                                popUpTo("login") { inclusive = true }
+                            }
+                        }
+                    }
+                } else {
+                    isLoading = false
+                    Toast.makeText(context, "Error en Firebase: ${task.exception?.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                account?.idToken?.let { firebaseAuthWithGoogle(it) }
+            } catch (e: ApiException) {
+                isLoading = false
+                Toast.makeText(context, "Error de Google: ${e.statusCode}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            isLoading = false
+        }
+    }
 
     fun soloLetras(texto: String): Boolean = texto.all { it.isLetter() || it.isWhitespace() }
 
@@ -227,7 +288,10 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            GoogleButton(onClick = { })
+            GoogleButton(onClick = { 
+                isLoading = true
+                launcher.launch(googleSignInClient.signInIntent)
+            })
 
             Spacer(modifier = Modifier.height(36.dp))
 

@@ -55,14 +55,26 @@ fun LoginScreen(navController: NavController) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential)
             .addOnCompleteListener { task ->
-                estaCargando = false
                 if (task.isSuccessful) {
-                    repositorio.guardarUsuarioEnFirestore()
-                    Toast.makeText(contexto, "Bienvenido: ${auth.currentUser?.displayName}", Toast.LENGTH_SHORT).show()
-                    navController.navigate("seleccion_rol") {
-                        popUpTo("login") { inclusive = true }
+                    alcanceCorrutina.launch {
+                        val usuario = repositorio.asegurarUsuarioEnFirestore()
+                        estaCargando = false
+                        Toast.makeText(contexto, "Bienvenido: ${auth.currentUser?.displayName}", Toast.LENGTH_SHORT).show()
+                        
+                        // Si el usuario ya tiene un rol asignado, vamos a home directamente
+                        if (usuario != null && !usuario.rol.isNullOrBlank()) {
+                            navController.navigate("home") {
+                                popUpTo("login") { inclusive = true }
+                            }
+                        } else {
+                            // Si es nuevo o no tiene rol, debe elegirlo
+                            navController.navigate("seleccion_rol") {
+                                popUpTo("login") { inclusive = true }
+                            }
+                        }
                     }
                 } else {
+                    estaCargando = false
                     Toast.makeText(contexto, "Error en Firebase: ${task.exception?.message}", Toast.LENGTH_LONG).show()
                 }
             }

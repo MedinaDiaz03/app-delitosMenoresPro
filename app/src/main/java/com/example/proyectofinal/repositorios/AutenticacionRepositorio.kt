@@ -9,22 +9,43 @@ class AutenticacionRepositorio {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance()
 
-    fun guardarUsuarioEnFirestore() {
-        val user = auth.currentUser ?: return
-
+    suspend fun asegurarUsuarioEnFirestore(): Usuario? {
+        val user = auth.currentUser ?: return null
         val userRef = db.collection("usuarios").document(user.uid)
 
-        userRef.get().addOnSuccessListener { document ->
+        return try {
+            val document = userRef.get().await()
             if (!document.exists()) {
                 val nuevoUsuario = Usuario(
                     uid = user.uid,
                     nombre = user.displayName ?: "Usuario",
                     email = user.email ?: "",
-                    rol = "ciudadano",
+                    rol = "", // Empezamos vacío para detectar que debe elegir rol
                     verificado = false
                 )
-                userRef.set(nuevoUsuario)
+                userRef.set(nuevoUsuario).await()
+                nuevoUsuario
+            } else {
+                document.toObject(Usuario::class.java)
             }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun actualizarRol(nuevoRol: String, verificado: Boolean = false): Result<Boolean> {
+        return try {
+            val uid = auth.currentUser?.uid ?: throw Exception("Usuario no autenticado")
+            val actualizaciones = mutableMapOf<String, Any>(
+                "rol" to nuevoRol,
+                "verificado" to verificado
+            )
+            db.collection("usuarios").document(uid)
+                .update(actualizaciones)
+                .await()
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -49,7 +70,7 @@ class AutenticacionRepositorio {
     suspend fun iniciarSesion(correo: String, contrasena: String): Result<Boolean> {
         return try {
             auth.signInWithEmailAndPassword(correo, contrasena).await()
-            guardarUsuarioEnFirestore()
+            asegurarUsuarioEnFirestore()
             Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)
