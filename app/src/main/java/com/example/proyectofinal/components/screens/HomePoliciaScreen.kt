@@ -432,7 +432,7 @@ fun HomePoliciaScreen(navController: NavController) {
                     locationGranted = locationPermission.status.isGranted,
                     mapaOscuro = mapaOscuro,
                     esPolicia = true,
-                    marcadoresVisibles = marcadoresVisibles && mostrarIconos, // eliminamos parpadeo
+                    marcadoresVisibles = mostrarIconos,
                     navController = navController,
                     userLocation = userLocation,
                     usuarioIdActual = uidActual,

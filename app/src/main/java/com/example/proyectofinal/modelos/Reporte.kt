@@ -11,6 +11,7 @@ data class Reporte(
     val latitud: Double = 0.0,
     val longitud: Double = 0.0,
     val fecha: Timestamp = Timestamp.now(),
+    val timestamp: Long = System.currentTimeMillis(),
     val fotoUrl: String? = null,
     var anonimo: Boolean = false,
     val estado: String = "en_revision",

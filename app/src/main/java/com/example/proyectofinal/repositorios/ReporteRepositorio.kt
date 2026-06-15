@@ -17,9 +17,34 @@ class ReporteRepositorio {
     suspend fun enviarReporte(reporte: Reporte): Result<Boolean> {
         return try {
             val docRef = reportesCollection.document()
-            val reporteConId = reporte.copy(id = docRef.id)
+            // Aseguramos que el reporte tenga el ID y el timestamp actual
+            val reporteConId = reporte.copy(
+                id = docRef.id,
+                timestamp = System.currentTimeMillis()
+            )
             docRef.set(reporteConId).await()
             Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun eliminarReportesExpirados(): Result<Int> {
+        return try {
+            // 1 Año en milisegundos (365 días)
+            val unAnioEnMs = 365L * 24 * 60 * 60 * 1000L
+            val limite = System.currentTimeMillis() - unAnioEnMs
+
+            val query = reportesCollection
+                .whereLessThan("timestamp", limite)
+                .get().await()
+
+            var eliminados = 0
+            for (doc in query.documents) {
+                doc.reference.delete().await()
+                eliminados++
+            }
+            Result.success(eliminados)
         } catch (e: Exception) {
             Result.failure(e)
         }

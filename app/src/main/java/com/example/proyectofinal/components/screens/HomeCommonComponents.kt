@@ -201,13 +201,22 @@ fun MapaConReportes(
         }
 
         ubicacionesFiltradas.forEach { live ->
-            Marker(
-                state = MarkerState(position = LatLng(live.latitud, live.longitud)),
-                title = "Persona en estado SOS",
-                snippet = "Ubicación activa por emergencia",
-                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
-                alpha = 0.9f
-            )
+            key(live.usuarioId) {
+                val markerState = rememberMarkerState(position = LatLng(live.latitud, live.longitud))
+                
+                // Actualizar posición si cambia en Firebase sin recrear el marcador
+                LaunchedEffect(live.latitud, live.longitud) {
+                    markerState.position = LatLng(live.latitud, live.longitud)
+                }
+
+                Marker(
+                    state = markerState,
+                    title = "Persona en estado SOS",
+                    snippet = "Ubicación activa por emergencia",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
+                    alpha = 0.9f
+                )
+            }
         }
     }
 
@@ -272,18 +281,20 @@ fun MapaConReportes(
 @Composable
 fun RenderMarkers(reportes: List<Reporte>, onReporteClick: (Reporte) -> Unit) {
     reportes.forEach { reporte ->
-        if (reporte.latitud != 0.0 && reporte.longitud != 0.0) {
-            val color = obtenerColorMarker(reporte.categoria)
-            Marker(
-                state = MarkerState(position = LatLng(reporte.latitud, reporte.longitud)),
-                title = reporte.categoria.uppercase(),
-                snippet = reporte.descripcion.take(60),
-                icon = BitmapDescriptorFactory.defaultMarker(color),
-                onClick = {
-                    onReporteClick(reporte)
-                    true
-                }
-            )
+        key(reporte.id) {
+            if (reporte.latitud != 0.0 && reporte.longitud != 0.0) {
+                val color = obtenerColorMarker(reporte.categoria)
+                Marker(
+                    state = MarkerState(position = LatLng(reporte.latitud, reporte.longitud)),
+                    title = reporte.categoria.uppercase(),
+                    snippet = reporte.descripcion.take(60),
+                    icon = BitmapDescriptorFactory.defaultMarker(color),
+                    onClick = {
+                        onReporteClick(reporte)
+                        true
+                    }
+                )
+            }
         }
     }
 }

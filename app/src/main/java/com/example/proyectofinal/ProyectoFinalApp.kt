@@ -1,8 +1,13 @@
 package com.example.proyectofinal
 
 import android.app.Application
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.cloudinary.android.MediaManager
+import com.example.proyectofinal.servicios.ExpirarReportesWorker
 import com.google.firebase.FirebaseApp
+import java.util.concurrent.TimeUnit
 
 class ProyectoFinalApp : Application() {
     //Lo primero que inicia con la app
@@ -13,6 +18,17 @@ class ProyectoFinalApp : Application() {
 
         //La app inicia el servicio de firebase para tenerlo listo para usarlo
         FirebaseApp.initializeApp(this)
+
+        // Programar limpieza de reportes antiguos (Fase 5 - 1 año de persistencia)
+        val expirarWorkRequest = PeriodicWorkRequestBuilder<ExpirarReportesWorker>(
+            24, TimeUnit.HOURS
+        ).build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "expirar_reportes",
+            ExistingPeriodicWorkPolicy.KEEP,
+            expirarWorkRequest
+        )
 
         // CONFIGURACIÓN DE CLOUDINARY
         val config = mapOf(
