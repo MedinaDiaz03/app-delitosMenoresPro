@@ -50,6 +50,7 @@ fun RegisterScreen(navController: NavController) {
     var aceptoTerminos by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var codigoPolicia by remember { mutableStateOf("") }
+    var mostrarDialogoTerminos by remember { mutableStateOf(false) }
 
     var nombreError by remember { mutableStateOf<String?>(null) }
     var correoError by remember { mutableStateOf<String?>(null) }
@@ -224,11 +225,70 @@ fun RegisterScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Column(modifier = Modifier.fillMaxWidth()) {
-                TermsCheckbox(
-                    checked = aceptoTerminos,
-                    onCheckedChange = { aceptoTerminos = it; terminosError = false }
+            // Diálogo de Términos y Condiciones
+            if (mostrarDialogoTerminos) {
+                AlertDialog(
+                    onDismissRequest = { mostrarDialogoTerminos = false },
+                    title = { Text("Términos y Condiciones", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                            Text(
+                                "Al usar SafetyConnect, aceptas lo siguiente:\n\n" +
+                                "1. Veracidad: Te comprometes a reportar incidentes reales. El uso malintencionado o reportes falsos constantes resultarán en la suspensión de la cuenta.\n\n" +
+                                "2. Privacidad: Tu ubicación se utiliza exclusivamente para el envío de alertas cercanas y la gestión de emergencias SOS.\n\n" +
+                                "3. Seguridad: No debes arriesgar tu integridad física para documentar un incidente.\n\n" +
+                                "4. Rol Policial: Si te registras como oficial, tu identidad será verificada. El mal uso de las funciones de autoridad es responsabilidad legal del usuario.\n\n" +
+                                "5. Comunidad: Fomentamos el respeto y la colaboración ciudadana.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Justify
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = { 
+                            aceptoTerminos = true
+                            terminosError = false
+                            mostrarDialogoTerminos = false 
+                        }) {
+                            Text("Aceptar y Continuar")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { mostrarDialogoTerminos = false }) {
+                            Text("Cerrar")
+                        }
+                    }
                 )
+            }
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = aceptoTerminos,
+                        onCheckedChange = { aceptoTerminos = it; terminosError = false },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    Text(
+                        text = "Acepto los ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF475569)
+                    )
+                    Text(
+                        text = "Términos y Condiciones",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                        ),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { mostrarDialogoTerminos = true }
+                    )
+                }
+
                 if (terminosError) {
                     Text(
                         text = "Debes aceptar los términos para continuar",
