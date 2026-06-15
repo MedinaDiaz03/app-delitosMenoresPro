@@ -101,24 +101,29 @@ fun HomePoliciaScreen(navController: NavController) {
             locationPermission.launchPermissionRequest()
         }
 
-        // Loop de notificaciones para el Policía (1km de radio)
+        // Loop de notificaciones para el Policía (2km de radio)
         while (true) {
             if (locationPermission.status.isGranted) {
                 val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
                 if (ubicacionActual != null) {
+                    val ahora = System.currentTimeMillis()
+                    val unDiaEnMillis = 24 * 60 * 60 * 1000L
+
                     reportes.filter { repo ->
+                        val fechaMs = repo.fecha?.toDate()?.time ?: 0L
                         repo.id !in idsNotificados &&
-                        (repo.fecha?.toDate()?.time ?: 0L) >= inicioDeHoy &&
+                        (ahora - fechaMs) <= unDiaEnMillis &&
                         calcularDistancia(
                             ubicacionActual.latitude, ubicacionActual.longitude,
                             repo.latitud, repo.longitud
-                        ) < 1000.0
+                        ) < 2000.0
                     }.forEach { repo ->
                         idsNotificados.add(repo.id)
                         NotificationHelper.mostrarNotificacion(
                             context,
                             "NUEVO REPORTE (Policía): ${repo.categoria.uppercase()}",
-                            repo.descripcion.ifEmpty { "Se ha detectado un incidente en su zona de patrullaje" }
+                            repo.descripcion.ifEmpty { "Se ha detectado un incidente en su zona de patrullaje" },
+                            repo.id
                         )
                     }
                 }

@@ -29,8 +29,8 @@ fun HomeRouterScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         usuario = authRepositorio.obtenerDatosUsuarioActual()
         
-        if (usuario?.rol == "ciudadano") {
-            // 1. Programar Notificación Diaria
+        // 1. Programar Notificación Diaria (Siempre para usuarios logueados)
+        if (usuario != null) {
             val workRequest = PeriodicWorkRequestBuilder<NotificacionDiariaWorker>(
                 1, TimeUnit.DAYS
             ).build()
@@ -41,11 +41,22 @@ fun HomeRouterScreen(navController: NavController) {
                 workRequest
             )
 
-            // 2. Pedir Permisos de Notificación (Solo Android 13+)
+            // 2. Pedir Permisos necesarios
+            val permisos = mutableListOf<String>()
+            
+            // Permiso de Notificaciones (Android 13+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permisos.add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+            
+            // Permiso de Ubicación
+            permisos.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            permisos.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+
+            if (permisos.isNotEmpty()) {
                 ActivityCompat.requestPermissions(
                     context as Activity,
-                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    permisos.toTypedArray(),
                     101
                 )
             }

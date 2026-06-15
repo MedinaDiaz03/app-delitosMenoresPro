@@ -33,6 +33,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -87,8 +88,11 @@ fun HomeCiudadanoScreen(navController: NavController) {
     var reporteCercano by remember { mutableStateOf<Reporte?>(null) }
     val idsNotificados = remember { mutableSetOf<String>() }
 
-    val locationPermission = rememberPermissionState(
-        android.Manifest.permission.ACCESS_FINE_LOCATION
+    val locationPermissionsState = rememberMultiplePermissionsState(
+        permissions = listOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        )
     )
 
     val camaraState = rememberCameraPositionState {
@@ -103,13 +107,13 @@ fun HomeCiudadanoScreen(navController: NavController) {
             reportes = lista.filter { it.estado == "activo" }
         }
 
-        if (!locationPermission.status.isGranted) {
-            locationPermission.launchPermissionRequest()
+        if (!locationPermissionsState.allPermissionsGranted) {
+            locationPermissionsState.launchMultiplePermissionRequest()
         }
 
         // Loop de detección de proximidad (50m) y notificaciones (1km)
         while (true) {
-            if (locationPermission.status.isGranted) {
+            if (locationPermissionsState.allPermissionsGranted) {
                 val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
                 if (ubicacionActual != null) {
                     val ahora = System.currentTimeMillis()
@@ -133,7 +137,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
                         prefs.edit().putStringSet("ids", idsIgnorados.toSet()).apply()
                     }
 
-                    // Notificación sistema para reportes de las ÚLTIMAS 24H dentro de 1km
+                    // Notificación sistema para reportes de las ÚLTIMAS 24H dentro de 2km
                     reportes.filter { repo ->
                         val fechaMs = repo.fecha.toDate().time
                         repo.id !in idsNotificados &&
@@ -141,13 +145,14 @@ fun HomeCiudadanoScreen(navController: NavController) {
                         calcularDistancia(
                             ubicacionActual.latitude, ubicacionActual.longitude,
                             repo.latitud, repo.longitud
-                        ) < 1000.0
+                        ) < 2000.0
                     }.forEach { repo ->
                         idsNotificados.add(repo.id)
                         NotificationHelper.mostrarNotificacion(
                             context,
                             "Incidente detectado: ${repo.categoria.uppercase()}",
-                            repo.descripcion.ifEmpty { "Nuevo reporte en tu zona" }
+                            repo.descripcion.ifEmpty { "Nuevo reporte en tu zona" },
+                            repo.id
                         )
                     }
                 }
@@ -156,8 +161,8 @@ fun HomeCiudadanoScreen(navController: NavController) {
         }
     }
 
-    LaunchedEffect(locationPermission.status.isGranted) {
-        if (locationPermission.status.isGranted) {
+    LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
+        if (locationPermissionsState.allPermissionsGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
             if (ubicacion != null) {
                 userLocation = LatLng(ubicacion.latitude, ubicacion.longitude)
@@ -167,7 +172,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
     }
 
     suspend fun volverAMiUbicacion() {
-        if (locationPermission.status.isGranted) {
+        if (locationPermissionsState.allPermissionsGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
             if (ubicacion != null) {
                 camaraState.animate(
@@ -392,7 +397,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
                 MapaConReportes(
                     reportes = reportes,
                     camaraState = camaraState,
-                    locationGranted = locationPermission.status.isGranted,
+                    locationGranted = locationPermissionsState.allPermissionsGranted,
                     mapaOscuro = mapaOscuro,
                     esPolicia = false,
                     marcadoresVisibles = mostrarIconos,

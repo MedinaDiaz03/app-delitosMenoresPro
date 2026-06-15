@@ -22,22 +22,37 @@ import com.example.proyectofinal.components.screens.ReportScreen
 import com.example.proyectofinal.components.screens.ReportDetailScreen
 import com.example.proyectofinal.components.screens.SeleccionRolScreen
 import com.example.proyectofinal.components.screens.ValidacionEmergenciaScreen
+import androidx.compose.runtime.LaunchedEffect
+import com.example.proyectofinal.components.screens.*
 import com.example.proyectofinal.helpers.RolHelper
 import com.example.proyectofinal.ui.theme.ProyectoFinalTheme
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 
 class MainActivity : ComponentActivity() {
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent) // Actualiza el intent para que LaunchedEffect lo detecte
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        enableEdgeToEdge()//hace que la app se estire para usar toda la pantalla del cel
+        enableEdgeToEdge()
         setContent {
             ProyectoFinalTheme {
                 Surface {
-                    val navController = rememberNavController()//gps de la app
+                    val navController = rememberNavController()
 
-                    NavHost(navController = navController, startDestination = "login") {//el gps consigue el mapa y se declara un punto de partida
+                    // Lógica para capturar el click de la notificación
+                    LaunchedEffect(intent) {
+                        val reporteId = intent.getStringExtra("reporteId")
+                        if (!reporteId.isNullOrEmpty()) {
+                            // Navegamos al detalle. Usamos "home" primero para asegurar que
+                            // el flujo de autenticación se procese si es necesario.
+                            navController.navigate("report_detail/$reporteId")
+                        }
+                    }
+
+                    NavHost(navController = navController, startDestination = "login") {
                         //Se nombra las rutas existentes y asignando direcciones a cada ruta
                         composable("login")         { LoginScreen(navController) }
                         composable("register")      { RegisterScreen(navController) }

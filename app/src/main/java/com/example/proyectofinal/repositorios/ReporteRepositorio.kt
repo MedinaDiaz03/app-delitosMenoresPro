@@ -73,7 +73,7 @@ class ReporteRepositorio {
 
     fun escucharReportes(onResult: (List<Reporte>) -> Unit) {
         reportesCollection
-            .whereEqualTo("estado", "activo")
+            // Quitamos el filtro de "activo" para que el historial global muestre todo
             .orderBy("fecha", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, e ->
                 if (e != null) return@addSnapshotListener
@@ -82,18 +82,14 @@ class ReporteRepositorio {
             }
     }
 
-    suspend fun confirmarReporte(id: String) {
-        try {
-            reportesCollection.document(id)
-                .update("confirmaciones", FieldValue.increment(1)).await()
-        } catch (_: Exception) {}
-    }
-
-    suspend fun desmentirReporte(id: String) {
-        try {
-            reportesCollection.document(id)
-                .update("desmentidos", FieldValue.increment(1)).await()
-        } catch (_: Exception) {}
+    suspend fun validarComoPolicia(reporteId: String, esReal: Boolean): Result<Boolean> {
+        return try {
+            val nuevoEstado = if (esReal) "verificado" else "falso"
+            reportesCollection.document(reporteId).update("estado", nuevoEstado).await()
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     // ── VALIDACIONES ──────────────────────────────────────────────────────────
@@ -108,8 +104,8 @@ class ReporteRepositorio {
 
             val docId = "${reporteId}_${usuarioId}"
 
-            // Escribir directamente sin pre-check GET — idempotente por docId compuesto.
-            // Evita el READ extra que puede ser bloqueado por reglas de Firestore.
+            // PASO 1: Guardar la validación. Esto DEBE funcionar si las reglas permiten
+            // crear documentos en la colección "validaciones" donde el ID contiene el UID del usuario.
             db.collection("validaciones").document(docId).set(
                 mapOf(
                     "id" to docId,
@@ -120,7 +116,9 @@ class ReporteRepositorio {
                 )
             ).await()
 
-            // Actualizar contadores y estado del reporte — best-effort, no bloquea el resultado
+            // PASO 2: Intentar actualizar contadores. Si las reglas de Firebase deniegan
+            // el acceso (PERMISSION_DENIED) porque el usuario no es dueño del reporte,
+            // atrapamos el error y devolvemos éxito. Tu voto ya se guardó arriba.
             try {
                 val campo = if (esReal) "validacionesCount" else "rechazosCount"
                 reportesCollection.document(reporteId).update(campo, FieldValue.increment(1)).await()
@@ -138,11 +136,14 @@ class ReporteRepositorio {
                         }
                         rechazos >= 3 -> {
                             reportesCollection.document(reporteId).update("estado", "falso").await()
-                            ajustarConfianzaValidadores(reporteId, votaronReal = true, delta = -2)
+                            ajustarConfianzaValidadores(reporteId, votaronReal = false, delta = -2)
                         }
                     }
                 }
-            } catch (_: Exception) { /* Contadores son best-effort; la validación ya fue guardada */ }
+            } catch (e: Exception) {
+                // Ignorar fallos de permisos al actualizar el documento de otra persona
+                android.util.Log.w("ReporteRepositorio", "No se pudo actualizar contador por seguridad, pero voto guardado: ${e.message}")
+            }
 
             Result.success("ok")
         } catch (e: Exception) {

@@ -11,8 +11,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // Aquí procesamos el mensaje cuando la app está en primer plano.
         val titulo = remoteMessage.notification?.title ?: "Alerta de Seguridad"
         val mensaje = remoteMessage.notification?.body ?: "Incidente reportado cerca de tu ubicación"
+        val reporteId = remoteMessage.data["reporteId"]
 
-        NotificationHelper.mostrarNotificacion(this, titulo, mensaje)
+        NotificationHelper.mostrarNotificacion(this, titulo, mensaje, reporteId)
     }
 
     override fun onNewToken(token: String) {

@@ -41,6 +41,7 @@ fun ValidacionEmergenciaScreen(
     var esPropioReporte by remember { mutableStateOf(false) }
     var yaVoto by remember { mutableStateOf(false) }
     var categoria by remember { mutableStateOf("") }
+    var estadoReporte by remember { mutableStateOf("activo") }
     var cargando by remember { mutableStateOf(true) }
     var votando by remember { mutableStateOf(false) }
     var mensajeResultado by remember { mutableStateOf<String?>(null) }
@@ -55,6 +56,7 @@ fun ValidacionEmergenciaScreen(
             esPropioReporte = reporte.usuarioId == usuario.uid
             yaVoto = reporteRepo.yaVoto(reporteId, usuario.uid)
             categoria = reporte.categoria
+            estadoReporte = reporte.estado
         }
         cargando = false
     }
@@ -179,6 +181,69 @@ fun ValidacionEmergenciaScreen(
                     }
                 }
 
+                estadoReporte != "activo" -> {
+                    val esVerificado = estadoReporte == "verificado"
+                    val esResuelto = estadoReporte == "resuelto"
+                    
+                    val colorFondo = when {
+                        esVerificado -> Color(0xFFF0FDF4) // Verde claro
+                        esResuelto -> Color(0xFFEFF6FF)   // Azul claro
+                        else -> Color(0xFFFEF2F2)         // Rojo claro
+                    }
+                    
+                    val colorBorde = when {
+                        esVerificado -> Color(0xFFBBF7D0)
+                        esResuelto -> Color(0xFFBFDBFE)
+                        else -> Color(0xFFFECACA)
+                    }
+
+                    val colorTexto = when {
+                        esVerificado -> Color(0xFF166534)
+                        esResuelto -> Color(0xFF1E40AF)
+                        else -> Color(0xFF991B1B)
+                    }
+
+                    val titulo = when {
+                        esVerificado -> "Este reporte ya ha sido VERIFICADO."
+                        esResuelto -> "Este incidente ya ha sido RESUELTO."
+                        else -> "Este reporte ha sido marcado como FALSA ALARMA."
+                    }
+
+                    val icono = when {
+                        esVerificado -> Icons.Default.CheckCircle
+                        esResuelto -> Icons.Default.TaskAlt
+                        else -> Icons.Default.Error
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = colorFondo),
+                        border = BorderStroke(1.dp, colorBorde),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(icono, null, tint = colorTexto, modifier = Modifier.size(32.dp))
+                            Text(titulo, color = colorTexto, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                            Text(
+                                "Ya no es posible registrar más validaciones.",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { navController.popBackStack() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("Cerrar") }
+                }
+
                 esPropioReporte -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -193,88 +258,97 @@ fun ValidacionEmergenciaScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(Icons.Default.Warning, null, tint = Color(0xFF856404), modifier = Modifier.size(28.dp))
-                            Text(
-                                "No puedes validar tu propio reporte",
-                                color = Color(0xFF856404),
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            )
+                            Text("No puedes validar tu propio reporte", color = Color(0xFF856404), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         }
                     }
                     Spacer(modifier = Modifier.height(24.dp))
                     OutlinedButton(
                         onClick = { navController.popBackStack() },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                    ) { Text("Volver", fontWeight = FontWeight.Bold) }
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("Volver") }
                 }
 
                 yaVoto -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
-                        border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
                         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2563EB), modifier = Modifier.size(28.dp))
-                            Text(
-                                "Ya registraste tu validación para este reporte.",
-                                color = Color(0xFF1E3A8A),
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            )
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF64748B), modifier = Modifier.size(32.dp))
+                            Text("Ya has participado en este reporte", fontWeight = FontWeight.Bold, color = Color(0xFF475569))
+                            Text("Tu validación ya fue registrada previamente.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                         }
                     }
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
                         onClick = { navController.popBackStack() },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
-                    ) { Text("Volver", fontWeight = FontWeight.Bold) }
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("Volver") }
                 }
 
                 esPolicia -> {
-                    // Policía: un solo botón de confirmación oficial
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                    ) {
-                        Text(
-                            "Como oficial, tu validación eleva la prioridad de este reporte de forma inmediata y alerta a las unidades cercanas.",
-                            modifier = Modifier.padding(20.dp),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF1E3A8A),
-                            textAlign = TextAlign.Center,
-                            lineHeight = 22.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(28.dp))
+                    // Panel de Oficial con dos opciones
+                    Text(
+                        "PANEL DE AUTORIDAD",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
                     Button(
                         onClick = {
-                            onValidarComoPolicia(reporteId)
-                            navController.popBackStack()
+                            votando = true
+                            scope.launch {
+                                val res = reporteRepo.validarComoPolicia(reporteId, esReal = true)
+                                votando = false
+                                if (res.isSuccess) {
+                                    onValidarComoPolicia(reporteId)
+                                    mensajeResultado = "Reporte VERIFICADO correctamente."
+                                }
+                            }
                         },
+                        enabled = !votando,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.GppGood, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Confirmar Emergencia")
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            votando = true
+                            scope.launch {
+                                val res = reporteRepo.validarComoPolicia(reporteId, esReal = false)
+                                votando = false
+                                if (res.isSuccess) {
+                                    mensajeResultado = "Reporte marcado como FALSA ALARMA."
+                                }
+                            }
+                        },
+                        enabled = !votando,
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
+                        border = BorderStroke(1.5.dp, Color(0xFFDC2626))
                     ) {
-                        Icon(Icons.Default.GppGood, null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Block, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Confirmar emergencia oficial", fontWeight = FontWeight.Bold)
+                        Text("Marcar como Falsa Alarma")
                     }
                 }
 

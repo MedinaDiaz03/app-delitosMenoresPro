@@ -2,6 +2,7 @@ package com.example.proyectofinal.components.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -14,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -32,11 +34,6 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.maps.android.compose.*
-import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.MarkerState
-import androidx.compose.ui.draw.scale
-import android.widget.Toast
-import com.example.proyectofinal.servicios.FCMHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.*
@@ -203,7 +200,7 @@ fun MapaConReportes(
     // Dialog al hacer clic en un marcador
     reporteSeleccionado?.let { reporte ->
         val distanciaText = if (userLocation != null) {
-            val metros = calcularDistancia(
+            val metros = calcularDistanciaInterna(
                 userLocation.latitude, userLocation.longitude,
                 reporte.latitud, reporte.longitud
             ).toInt()
@@ -332,9 +329,7 @@ fun BotonSOS(modifier: Modifier = Modifier) {
     val locationRepo = remember { LocationRepositorio(context) }
 
     var mostrarDialogo by remember { mutableStateOf(false) }
-    var confirmacion by remember { mutableStateOf(false) }
 
-    // Diálogos de llamada (se activan con un clic normal)
     if (mostrarDialogo) {
         AlertDialog(
             onDismissRequest = { mostrarDialogo = false },
@@ -354,35 +349,7 @@ fun BotonSOS(modifier: Modifier = Modifier) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    mostrarDialogo = false
-                    confirmacion = true
-                }) {
-                    Text("Cancelar")
-                }
-            }
-        )
-    } else if (confirmacion) {
-        AlertDialog(
-            onDismissRequest = { confirmacion = false },
-            icon = { Icon(Icons.Default.LocalPolice, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(36.dp)) },
-            title = { Text("¿Estás seguro(a) que quieres cancelar la llamada?", fontWeight = FontWeight.Bold) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        confirmacion = false
-                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:105"))
-                        context.startActivity(intent)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE04F5F))
-                ) {
-                    Text("Llamar ahora", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmacion = false }) {
-                    Text("Sí, estoy seguro")
-                }
+                TextButton(onClick = { mostrarDialogo = false }) { Text("Cancelar") }
             }
         )
     }
@@ -393,43 +360,27 @@ fun BotonSOS(modifier: Modifier = Modifier) {
             .size(72.dp)
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { 
-                        // Toque rápido: Abre el flujo de llamada
-                        mostrarDialogo = true 
-                    },
+                    onTap = { mostrarDialogo = true },
                     onPress = {
-                        // Iniciar cronómetro de 3 segundos al presionar
                         val job = scope.launch {
-                            delay(3000) // Esperar 3 segundos exactos
-                            
-                            // Acción SOS Automática si sigue presionado
+                            delay(3000)
                             val usuario = authRepo.obtenerDatosUsuarioActual()
                             val ubicacion = locationRepo.obtenerUbicacionActual()
-
                             if (usuario != null && ubicacion != null) {
                                 val nuevoSOS = Reporte(
                                     usuarioId = usuario.uid,
                                     usuarioNombre = usuario.nombre,
                                     categoria = "sos",
-                                    descripcion = "ALERTA DE EMERGENCIA (ENVÍO AUTOMÁTICO 3s)",
+                                    descripcion = "ALERTA SOS",
                                     latitud = ubicacion.latitude,
                                     longitud = ubicacion.longitude,
                                     estado = "activo"
                                 )
                                 reportRepo.enviarReporte(nuevoSOS)
-                                FCMHelper.enviarNotificacionGlobal(
-                                    context, 
-                                    "🚨 SOS: Emergencia Detectada", 
-                                    "Un vecino ha activado un SOS cerca de tu ubicación."
-                                )
-                                Toast.makeText(context, "🚨 SOS ENVIADO AUTOMÁTICAMENTE", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "🚨 SOS ENVIADO", Toast.LENGTH_SHORT).show()
                             }
                         }
-                        try {
-                            awaitRelease() // Esperar a que el usuario suelte
-                        } finally {
-                            job.cancel() // Si suelta antes de los 3s, se cancela el envío automático
-                        }
+                        try { awaitRelease() } finally { job.cancel() }
                     }
                 )
             },
@@ -444,4 +395,17 @@ fun BotonSOS(modifier: Modifier = Modifier) {
             Text("SOS", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
         }
     }
+}
+
+private fun calcularDistanciaInterna(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6371e3
+    val p1 = Math.toRadians(lat1)
+    val p2 = Math.toRadians(lat2)
+    val dp = Math.toRadians(lat2 - lat1)
+    val dl = Math.toRadians(lon2 - lon1)
+    val a = Math.sin(dp / 2) * Math.sin(dp / 2) +
+            Math.cos(p1) * Math.cos(p2) *
+            Math.sin(dl / 2) * Math.sin(dl / 2)
+    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return r * c
 }
