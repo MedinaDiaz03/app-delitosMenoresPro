@@ -94,7 +94,7 @@ fun HomePoliciaScreen(navController: NavController) {
         
         // Escuchar reportes en tiempo real
         reporteRepositorio.escucharReportes { lista ->
-            reportes = lista.filter { it.estado == "activo" }
+            reportes = lista.filter { it.estado in listOf("en_revision", "activo", "verificado") }
         }
 
         if (!locationPermission.status.isGranted) {

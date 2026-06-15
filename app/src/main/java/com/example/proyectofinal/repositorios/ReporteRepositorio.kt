@@ -5,6 +5,7 @@ import com.example.proyectofinal.modelos.Validacion
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.tasks.await
 import kotlin.math.*
@@ -67,12 +68,17 @@ class ReporteRepositorio {
         } catch (_: Exception) { null }
     }
 
-    fun actualizarEstadoReporte(reporteId: String, nuevoEstado: String) {
-        reportesCollection.document(reporteId).update("estado", nuevoEstado)
+    suspend fun actualizarEstadoReporte(reporteId: String, nuevoEstado: String): Result<Unit> {
+        return try {
+            reportesCollection.document(reporteId).update("estado", nuevoEstado).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
-    fun escucharReportes(onResult: (List<Reporte>) -> Unit) {
-        reportesCollection
+    fun escucharReportes(onResult: (List<Reporte>) -> Unit): ListenerRegistration {
+        return reportesCollection
             // Quitamos el filtro de "activo" para que el historial global muestre todo
             .orderBy("fecha", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, e ->
@@ -132,25 +138,38 @@ class ReporteRepositorio {
                     )
                 ).await()
             } else {
-                // Voto ciudadano: incrementar contadores
+                // Voto ciudadano: incrementar contadores y verificar umbral en una transacción
                 val campoVoto = if (voto) "votosReales" else "votosFalsos"
-                reportesCollection.document(reporteId).update(
-                    mapOf(
+                val docRef = reportesCollection.document(reporteId)
+                var estadoCambiado: String? = null
+
+                db.runTransaction { transaction ->
+                    val snapshot = transaction.get(docRef)
+                    val totalActual = (snapshot.getLong("totalVotosCiudadanos") ?: 0L) + 1L
+                    val votosRealesActual = (snapshot.getLong("votosReales") ?: 0L) + (if (voto) 1L else 0L)
+                    val votosFalsosActual = (snapshot.getLong("votosFalsos") ?: 0L) + (if (!voto) 1L else 0L)
+                    val policiaHaVotado = snapshot.getBoolean("policiaHaVotado") ?: false
+                    val estadoActual = snapshot.getString("estado") ?: ""
+
+                    val updates = mutableMapOf<String, Any>(
                         "totalVotosCiudadanos" to FieldValue.increment(1),
                         campoVoto to FieldValue.increment(1)
                     )
-                ).await()
 
-                // Re-leer para verificar si se alcanzó el umbral
-                val updated = reportesCollection.document(reporteId).get().await()
-                    .toObject(Reporte::class.java)
-                if (updated != null
-                    && updated.totalVotosCiudadanos >= 3
-                    && !updated.policiaHaVotado
-                    && updated.estado in listOf("en_revision", "activo")
-                ) {
-                    val nuevoEstado = if (updated.votosReales > updated.votosFalsos) "verificado" else "falso"
-                    reportesCollection.document(reporteId).update("estado", nuevoEstado).await()
+                    if (totalActual >= 3
+                        && !policiaHaVotado
+                        && estadoActual in listOf("en_revision", "activo")
+                    ) {
+                        val nuevoEstado = if (votosRealesActual > votosFalsosActual) "verificado" else "falso"
+                        updates["estado"] = nuevoEstado
+                        estadoCambiado = nuevoEstado
+                    }
+
+                    transaction.update(docRef, updates)
+                }.await()
+
+                // Ajustar confianza DESPUÉS de la transacción, solo si el estado cambió
+                estadoCambiado?.let { nuevoEstado ->
                     ajustarConfianzaValidadores(reporteId, votaronReal = (nuevoEstado == "verificado"), delta = 2)
                 }
             }
@@ -179,7 +198,7 @@ class ReporteRepositorio {
                 .whereEqualTo("reporteId", reporteId)
                 .get().await()
             docs.documents
-                .filter { it.getBoolean("esReal") == votaronReal || it.getBoolean("voto") == votaronReal }
+                .filter { it.getBoolean("voto") == votaronReal }
                 .forEach { doc ->
                     val uid = doc.getString("usuarioId") ?: return@forEach
                     db.collection("usuarios").document(uid)
@@ -200,7 +219,7 @@ class ReporteRepositorio {
                 .toObjects(Reporte::class.java)
 
             todos.filter { r ->
-                r.latitud != 0.0 || r.longitud != 0.0
+                r.latitud != 0.0 && r.longitud != 0.0
             }.filter { r ->
                 calcularDistanciaMetros(lat, lng, r.latitud, r.longitud) <= radioMetros
             }.sortedBy {

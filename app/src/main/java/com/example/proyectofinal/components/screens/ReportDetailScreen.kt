@@ -10,9 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +32,7 @@ import com.example.proyectofinal.servicios.GeocodingService
 import com.google.android.gms.maps.model.LatLng
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +40,7 @@ fun ReportDetailScreen(navController: NavController, reporteId: String) {
     val context = LocalContext.current
     val authRepo = remember { AutenticacionRepositorio() }
     val repo = remember { ReporteRepositorio() }
+    val scope = rememberCoroutineScope()
     var reporte by remember { mutableStateOf<Reporte?>(null) }
     var usuarioActual by remember { mutableStateOf<Usuario?>(null) }
     var cargando by remember { mutableStateOf(true) }
@@ -49,7 +49,6 @@ fun ReportDetailScreen(navController: NavController, reporteId: String) {
     LaunchedEffect(reporteId) {
         usuarioActual = authRepo.obtenerDatosUsuarioActual()
         reporte = repo.obtenerReportePorId(reporteId)
-        // Geocodificar si el reporte no tiene dirección guardada
         val r = reporte
         if (r != null && r.direccion.isNullOrEmpty() && (r.latitud != 0.0 || r.longitud != 0.0)) {
             direccionResuelta = GeocodingService.getAddressFromLatLng(
@@ -102,8 +101,10 @@ fun ReportDetailScreen(navController: NavController, reporteId: String) {
                 esPropio = usuarioActual?.uid == reporte!!.usuarioId,
                 direccionResuelta = direccionResuelta,
                 onCambiarEstado = { nuevoEstado ->
-                    repo.actualizarEstadoReporte(reporteId, nuevoEstado)
-                    navController.popBackStack()
+                    scope.launch {
+                        repo.actualizarEstadoReporte(reporteId, nuevoEstado)
+                        navController.popBackStack()
+                    }
                 },
                 onValidarClick = {
                     navController.navigate("validacion/${reporteId}")
@@ -167,15 +168,22 @@ fun DetalleContenido(
             }
         }
 
-        // ── CATEGORÍA Y FECHA ──
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                reporte.categoria.uppercase(),
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary
+        // ── CATEGORÍA, ESTADO Y FECHA ──
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    reporte.categoria.uppercase(),
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 )
-            )
+                EstadoBadge(estado = reporte.estado)
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -225,8 +233,7 @@ fun DetalleContenido(
                 val textoUbicacion = when {
                     !reporte.direccion.isNullOrEmpty() -> reporte.direccion!!
                     !direccionResuelta.isNullOrEmpty() -> direccionResuelta!!
-                    reporte.latitud != 0.0 || reporte.longitud != 0.0 ->
-                        "Obteniendo dirección..."
+                    reporte.latitud != 0.0 || reporte.longitud != 0.0 -> "Obteniendo dirección..."
                     else -> "Ubicación no disponible"
                 }
                 Text(
@@ -263,6 +270,12 @@ fun DetalleContenido(
                     color = Color(0xFF334155)
                 )
             }
+        }
+
+        // ── PANEL DE VOTACIÓN ──
+        if (reporte.totalVotosCiudadanos > 0 || reporte.policiaHaVotado) {
+            HorizontalDivider(color = Color(0xFFE2E8F0))
+            VotacionPanel(reporte = reporte)
         }
 
         // ── ACCIONES ──
@@ -333,5 +346,128 @@ fun DetalleContenido(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+fun EstadoBadge(estado: String) {
+    val (bgColor, textColor, label) = when (estado) {
+        "en_revision" -> Triple(Color(0xFFFFF3CD), Color(0xFF856404), "En revisión")
+        "activo"      -> Triple(Color(0xFFFFF3CD), Color(0xFF856404), "En revisión")
+        "verificado"  -> Triple(Color(0xFFD1FAE5), Color(0xFF166534), "Verificado")
+        "falso"       -> Triple(Color(0xFFFEE2E2), Color(0xFF991B1B), "Falsa alarma")
+        "resuelto"    -> Triple(Color(0xFFDBEAFE), Color(0xFF1E40AF), "Resuelto")
+        "en_proceso"  -> Triple(Color(0xFFFFEDD5), Color(0xFF9A3412), "En proceso")
+        else          -> Triple(Color(0xFFF1F5F9), Color(0xFF475569), estado)
+    }
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = bgColor
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = textColor
+        )
+    }
+}
+
+@Composable
+private fun VotacionPanel(reporte: Reporte) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "Validaciones de la comunidad",
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+            color = Color(0xFF1E293B)
+        )
+
+        // Veredicto policial (si existe)
+        if (reporte.policiaHaVotado) {
+            val esVerificadoPorPolicia = reporte.estadoFinalPorPolicia == "verificado"
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (esVerificadoPorPolicia) Color(0xFFF0FDF4) else Color(0xFFFEF2F2)
+                ),
+                border = BorderStroke(1.dp, if (esVerificadoPorPolicia) Color(0xFFBBF7D0) else Color(0xFFFECACA)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Shield,
+                        null,
+                        tint = if (esVerificadoPorPolicia) Color(0xFF166534) else Color(0xFF991B1B),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Column {
+                        Text(
+                            if (esVerificadoPorPolicia) "Verificado por autoridad" else "Falsa alarma según autoridad",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = if (esVerificadoPorPolicia) Color(0xFF166534) else Color(0xFF991B1B)
+                        )
+                        Text(
+                            "Un oficial emitió veredicto definitivo",
+                            fontSize = 12.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Conteo ciudadano
+        if (reporte.totalVotosCiudadanos > 0) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "${reporte.totalVotosCiudadanos} voto${if (reporte.totalVotosCiudadanos != 1) "s" else ""} ciudadano${if (reporte.totalVotosCiudadanos != 1) "s" else ""}",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = Color(0xFF1E293B)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF16A34A), modifier = Modifier.size(16.dp))
+                            Text(
+                                "${reporte.votosReales} reales",
+                                fontSize = 13.sp,
+                                color = Color(0xFF16A34A),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.Cancel, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(16.dp))
+                            Text(
+                                "${reporte.votosFalsos} falsas",
+                                fontSize = 13.sp,
+                                color = Color(0xFFE04F5F),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }

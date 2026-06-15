@@ -374,7 +374,7 @@ fun BotonSOS(modifier: Modifier = Modifier) {
                                     descripcion = "ALERTA SOS",
                                     latitud = ubicacion.latitude,
                                     longitud = ubicacion.longitude,
-                                    estado = "activo"
+                                    estado = "en_revision"
                                 )
                                 reportRepo.enviarReporte(nuevoSOS)
                                 Toast.makeText(context, "🚨 SOS ENVIADO", Toast.LENGTH_SHORT).show()

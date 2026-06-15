@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
+import com.example.proyectofinal.components.screens.EstadoBadge
 import com.example.proyectofinal.modelos.Reporte
 import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
@@ -185,18 +186,7 @@ fun ReportCard(reporte: Reporte, navController: NavController) {
                             fontSize = 15.sp,
                             color = Color(0xFF1E293B)
                         )
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                "Enviado",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        EstadoBadge(estado = reporte.estado)
                     }
 
                     Spacer(modifier = Modifier.height(4.dp))

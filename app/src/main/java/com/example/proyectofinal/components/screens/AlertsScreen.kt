@@ -76,7 +76,8 @@ fun AlertsScreen(navController: NavController) {
                         latLng.latitude, latLng.longitude,
                         repo.latitud, repo.longitud
                     ) <= 1000.0
-                    esReciente && estaCerca
+                    val estadoValido = repo.estado in listOf("en_revision", "activo", "verificado")
+                    esReciente && estaCerca && estadoValido
                 }
                 cargando = false
             }

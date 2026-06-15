@@ -41,7 +41,8 @@ fun ValidacionEmergenciaScreen(
     var esPropioReporte by remember { mutableStateOf(false) }
     var yaVoto by remember { mutableStateOf(false) }
     var categoria by remember { mutableStateOf("") }
-    var estadoReporte by remember { mutableStateOf("activo") }
+    var estadoReporte by remember { mutableStateOf("en_revision") }
+    var policiaHaVotado by remember { mutableStateOf(false) }
     var cargando by remember { mutableStateOf(true) }
     var votando by remember { mutableStateOf(false) }
     var mensajeResultado by remember { mutableStateOf<String?>(null) }
@@ -57,6 +58,7 @@ fun ValidacionEmergenciaScreen(
             yaVoto = reporteRepo.yaVoto(reporteId, usuario.uid)
             categoria = reporte.categoria
             estadoReporte = reporte.estado
+            policiaHaVotado = reporte.policiaHaVotado
         }
         cargando = false
     }
@@ -129,8 +131,8 @@ fun ValidacionEmergenciaScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Resultado de voto o estado especial
             when {
+                // 1. Resultado de una acción recién realizada
                 mensajeResultado != null -> {
                     val cardColor = if (esError) Color(0xFFFFF1F2) else Color(0xFFEFF6FF)
                     val borderColor = if (esError) Color(0xFFFECACA) else Color(0xFFBFDBFE)
@@ -181,39 +183,17 @@ fun ValidacionEmergenciaScreen(
                     }
                 }
 
-                estadoReporte != "activo" -> {
+                // 2. Reporte ya cerrado (verificado, falso, u otro estado final)
+                estadoReporte !in listOf("en_revision", "activo") -> {
                     val esVerificado = estadoReporte == "verificado"
-                    val esResuelto = estadoReporte == "resuelto"
-                    
-                    val colorFondo = when {
-                        esVerificado -> Color(0xFFF0FDF4) // Verde claro
-                        esResuelto -> Color(0xFFEFF6FF)   // Azul claro
-                        else -> Color(0xFFFEF2F2)         // Rojo claro
-                    }
-                    
-                    val colorBorde = when {
-                        esVerificado -> Color(0xFFBBF7D0)
-                        esResuelto -> Color(0xFFBFDBFE)
-                        else -> Color(0xFFFECACA)
-                    }
-
-                    val colorTexto = when {
-                        esVerificado -> Color(0xFF166534)
-                        esResuelto -> Color(0xFF1E40AF)
-                        else -> Color(0xFF991B1B)
-                    }
-
-                    val titulo = when {
-                        esVerificado -> "Este reporte ya ha sido VERIFICADO."
-                        esResuelto -> "Este incidente ya ha sido RESUELTO."
-                        else -> "Este reporte ha sido marcado como FALSA ALARMA."
-                    }
-
-                    val icono = when {
-                        esVerificado -> Icons.Default.CheckCircle
-                        esResuelto -> Icons.Default.TaskAlt
-                        else -> Icons.Default.Error
-                    }
+                    val colorFondo = if (esVerificado) Color(0xFFF0FDF4) else Color(0xFFFEF2F2)
+                    val colorBorde = if (esVerificado) Color(0xFFBBF7D0) else Color(0xFFFECACA)
+                    val colorTexto = if (esVerificado) Color(0xFF166534) else Color(0xFF991B1B)
+                    val titulo = if (esVerificado)
+                        "Este reporte ya ha sido VERIFICADO."
+                    else
+                        "Este reporte ha sido marcado como FALSA ALARMA."
+                    val icono = if (esVerificado) Icons.Default.CheckCircle else Icons.Default.Error
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -244,6 +224,7 @@ fun ValidacionEmergenciaScreen(
                     ) { Text("Cerrar") }
                 }
 
+                // 3. Es el propio reporte del usuario
                 esPropioReporte -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -269,6 +250,7 @@ fun ValidacionEmergenciaScreen(
                     ) { Text("Volver") }
                 }
 
+                // 4. Ya votó antes
                 yaVoto -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -295,8 +277,40 @@ fun ValidacionEmergenciaScreen(
                     ) { Text("Volver") }
                 }
 
+                // 5. Ciudadano bloqueado: ya votó un policía
+                !esPolicia && policiaHaVotado -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F4FF)),
+                        border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.GppGood, null, tint = Color(0xFF1E3A8A), modifier = Modifier.size(32.dp))
+                            Text("Reporte cerrado por autoridad", fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
+                            Text(
+                                "Un oficial ya emitió su veredicto. No se aceptan más votos ciudadanos.",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                color = Color(0xFF3B82F6)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { navController.popBackStack() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("Volver") }
+                }
+
+                // 6. Panel de policía
                 esPolicia -> {
-                    // Panel de Oficial con dos opciones
                     Text(
                         "PANEL DE AUTORIDAD",
                         style = MaterialTheme.typography.labelLarge,
@@ -304,16 +318,21 @@ fun ValidacionEmergenciaScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    
+
                     Button(
                         onClick = {
                             votando = true
                             scope.launch {
-                                val res = reporteRepo.validarComoPolicia(reporteId, esReal = true)
+                                val uid = authRepo.obtenerUsuarioActual()?.uid ?: ""
+                                val res = reporteRepo.agregarVoto(reporteId, uid, voto = true, esPolicia = true)
                                 votando = false
                                 if (res.isSuccess) {
                                     onValidarComoPolicia(reporteId)
+                                    esError = false
                                     mensajeResultado = "Reporte VERIFICADO correctamente."
+                                } else {
+                                    esError = true
+                                    mensajeResultado = res.exceptionOrNull()?.message ?: "Error al verificar"
                                 }
                             }
                         },
@@ -322,9 +341,12 @@ fun ValidacionEmergenciaScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.GppGood, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Confirmar Emergencia")
+                        if (votando) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp))
+                        else {
+                            Icon(Icons.Default.GppGood, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Confirmar Emergencia")
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -333,10 +355,15 @@ fun ValidacionEmergenciaScreen(
                         onClick = {
                             votando = true
                             scope.launch {
-                                val res = reporteRepo.validarComoPolicia(reporteId, esReal = false)
+                                val uid = authRepo.obtenerUsuarioActual()?.uid ?: ""
+                                val res = reporteRepo.agregarVoto(reporteId, uid, voto = false, esPolicia = true)
                                 votando = false
                                 if (res.isSuccess) {
+                                    esError = false
                                     mensajeResultado = "Reporte marcado como FALSA ALARMA."
+                                } else {
+                                    esError = true
+                                    mensajeResultado = res.exceptionOrNull()?.message ?: "Error al marcar"
                                 }
                             }
                         },
@@ -352,8 +379,8 @@ fun ValidacionEmergenciaScreen(
                     }
                 }
 
+                // 7. Ciudadano: botones de votación
                 else -> {
-                    // Ciudadano: dos botones de votación
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -379,7 +406,7 @@ fun ValidacionEmergenciaScreen(
                             esError = false
                             scope.launch {
                                 val uid = authRepo.obtenerUsuarioActual()?.uid ?: ""
-                                val resultado = reporteRepo.registrarValidacion(reporteId, uid, esReal = true)
+                                val resultado = reporteRepo.agregarVoto(reporteId, uid, voto = true, esPolicia = false)
                                 votando = false
                                 if (resultado.isSuccess) {
                                     esError = false
@@ -412,7 +439,7 @@ fun ValidacionEmergenciaScreen(
                             esError = false
                             scope.launch {
                                 val uid = authRepo.obtenerUsuarioActual()?.uid ?: ""
-                                val resultado = reporteRepo.registrarValidacion(reporteId, uid, esReal = false)
+                                val resultado = reporteRepo.agregarVoto(reporteId, uid, voto = false, esPolicia = false)
                                 votando = false
                                 if (resultado.isSuccess) {
                                     esError = false
