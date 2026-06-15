@@ -8,6 +8,9 @@ class ProyectoFinalApp : Application() {
     //Lo primero que inicia con la app
     override fun onCreate() {
         super.onCreate()
+        // Crear canales de notificación al arrancar
+        com.example.proyectofinal.servicios.NotificationHelper.createNotificationChannel(this)
+
         //La app inicia el servicio de firebase para tenerlo listo para usarlo
         FirebaseApp.initializeApp(this)
 
