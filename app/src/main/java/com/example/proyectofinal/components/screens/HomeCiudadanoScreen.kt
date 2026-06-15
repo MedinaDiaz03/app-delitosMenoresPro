@@ -167,14 +167,17 @@ fun HomeCiudadanoScreen(navController: NavController) {
     }
 
     // Bucle de publicación de ubicación SOLO si SOS está activo (cada 3 segundos)
-    LaunchedEffect(sosActivo, userLocation) {
-        if (sosActivo && userLocation != null && uidActual != null) {
+    LaunchedEffect(sosActivo) {
+        if (sosActivo && uidActual != null) {
             while (sosActivo) {
-                locationShareRepositorio.actualizarUbicacion(
-                    uidActual!!,
-                    userLocation!!.latitude,
-                    userLocation!!.longitude
-                )
+                val loc = locationRepositorio.obtenerUbicacionActual()
+                if (loc != null) {
+                    locationShareRepositorio.actualizarUbicacion(
+                        uidActual!!,
+                        loc.latitude,
+                        loc.longitude
+                    )
+                }
                 delay(3000)
             }
         }
@@ -491,7 +494,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
                 }
 
                 BotonSOS(
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 100.dp, end = 16.dp),
                     isActive = sosActivo,
                     onSosActivado = { activarSos() },
                     onLongPressComplete = { showCallDialog = true }
