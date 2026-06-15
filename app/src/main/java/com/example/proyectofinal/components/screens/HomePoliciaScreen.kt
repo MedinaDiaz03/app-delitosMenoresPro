@@ -81,6 +81,15 @@ fun HomePoliciaScreen(navController: NavController) {
         uidActual = usuario?.uid
     }
 
+    LaunchedEffect(uidActual) {
+        if (uidActual != null) {
+            locationShareRepositorio.escucharEstado(uidActual!!) { activo ->
+                sosActivo = activo
+            }
+        }
+    }
+
+
     // Escuchar reportes
     LaunchedEffect(Unit) {
         reporteRepositorio.escucharReportes { lista ->
@@ -152,17 +161,6 @@ fun HomePoliciaScreen(navController: NavController) {
         }
     }
 
-    // Desactivar SOS al salir
-    DisposableEffect(Unit) {
-        onDispose {
-            if (sosActivo && uidActual != null) {
-                scope.launch {
-                    locationShareRepositorio.detenerSos(uidActual!!)
-                }
-            }
-        }
-    }
-
     suspend fun volverAMiUbicacion() {
         if (locationPermission.status.isGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
@@ -186,27 +184,32 @@ fun HomePoliciaScreen(navController: NavController) {
         val usuarioActual = authRepositorio.obtenerDatosUsuarioActual()
         val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
         if (usuarioActual != null && ubicacionActual != null) {
+            // Actualizar ubicación en la UI
+            userLocation = LatLng(ubicacionActual.latitude, ubicacionActual.longitude)
+
+            // Crear reporte SOS
             val nuevoSOS = Reporte(
                 usuarioId = usuarioActual.uid,
                 usuarioNombre = usuarioActual.nombre,
                 categoria = "sos",
-                descripcion = "ALERTA SOS - POLICÍA",
+                descripcion = "ALERTA SOS",
                 latitud = ubicacionActual.latitude,
                 longitud = ubicacionActual.longitude,
                 estado = "verificado"
             )
             reporteRepositorio.enviarReporte(nuevoSOS)
-            Toast.makeText(context, "🚨 SOS ENVIADO (Policía)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "🚨 SOS ENVIADO. Compartiendo ubicación por 5 minutos.", Toast.LENGTH_LONG).show()
+
+            // Iniciar publicación de ubicación en Firestore (con expiración)
             locationShareRepositorio.iniciarSos(
                 usuarioActual.uid,
                 ubicacionActual.latitude,
                 ubicacionActual.longitude,
                 300000L
             )
-            sosActivo = true
-            delay(300000)
-            sosActivo = false
-            locationShareRepositorio.detenerSos(usuarioActual.uid)
+            // No establecer sosActivo = true aquí; lo hará el listener
+        } else {
+            Toast.makeText(context, "No se pudo obtener ubicación. Activa el GPS.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -471,6 +474,7 @@ fun HomePoliciaScreen(navController: NavController) {
 
                 BotonSOS(
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    isActive = sosActivo,
                     onSosActivado = { activarSos() }
                 )
             }

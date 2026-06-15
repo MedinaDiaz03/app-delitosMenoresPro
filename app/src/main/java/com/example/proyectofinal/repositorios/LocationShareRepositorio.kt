@@ -21,6 +21,16 @@ class LocationShareRepositorio {
         db.collection("location_sharing").document(uid).set(data).await()
     }
 
+    fun escucharEstado(uid: String, onResult: (Boolean) -> Unit) {
+        db.collection("location_sharing")
+            .document(uid)
+            .addSnapshotListener { snapshot, _ ->
+                val activo = snapshot?.getBoolean("activo") == true &&
+                        (snapshot.getLong("expiraEn") ?: 0) > System.currentTimeMillis()
+                onResult(activo)
+            }
+    }
+
     suspend fun actualizarUbicacion(uid: String, lat: Double, lng: Double) {
         val docRef = db.collection("location_sharing").document(uid)
         val snapshot = docRef.get().await()

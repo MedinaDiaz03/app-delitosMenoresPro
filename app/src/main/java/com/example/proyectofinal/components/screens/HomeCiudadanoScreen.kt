@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,7 +57,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
     val locationShareRepositorio = remember { LocationShareRepositorio() }
     val userFirebase = remember { FirebaseAuth.getInstance().currentUser }
     val photoUrl = userFirebase?.photoUrl
-
+    var showCallDialog by remember { mutableStateOf(false) }
     var usuario by remember { mutableStateOf<Usuario?>(null) }
     var reportes by remember { mutableStateOf<List<Reporte>>(emptyList()) }
     var mapaOscuro by remember { mutableStateOf(false) }
@@ -89,6 +91,14 @@ fun HomeCiudadanoScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         usuario = authRepositorio.obtenerDatosUsuarioActual()
         uidActual = usuario?.uid
+    }
+
+    LaunchedEffect(uidActual) {
+        if (uidActual != null) {
+            locationShareRepositorio.escucharEstado(uidActual!!) { activo ->
+                sosActivo = activo
+            }
+        }
     }
 
     // Escuchar reportes
@@ -181,17 +191,6 @@ fun HomeCiudadanoScreen(navController: NavController) {
         }
     }
 
-    // Desactivar SOS al salir de la pantalla
-    DisposableEffect(Unit) {
-        onDispose {
-            if (sosActivo && uidActual != null) {
-                scope.launch {
-                    locationShareRepositorio.detenerSos(uidActual!!)
-                }
-            }
-        }
-    }
-
     suspend fun volverAMiUbicacion() {
         if (locationPermissionsState.allPermissionsGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
@@ -211,11 +210,14 @@ fun HomeCiudadanoScreen(navController: NavController) {
         }
     }
 
-    // Función para activar SOS (crear reporte y publicar ubicación)
     suspend fun activarSos() {
         val usuarioActual = authRepositorio.obtenerDatosUsuarioActual()
         val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
         if (usuarioActual != null && ubicacionActual != null) {
+            // Actualizar ubicación en la UI
+            userLocation = LatLng(ubicacionActual.latitude, ubicacionActual.longitude)
+
+            // Crear reporte SOS
             val nuevoSOS = Reporte(
                 usuarioId = usuarioActual.uid,
                 usuarioNombre = usuarioActual.nombre,
@@ -226,19 +228,18 @@ fun HomeCiudadanoScreen(navController: NavController) {
                 estado = "verificado"
             )
             reporteRepositorio.enviarReporte(nuevoSOS)
-            Toast.makeText(context, "🚨 SOS ENVIADO", Toast.LENGTH_SHORT).show()
-            // Activar publicación de ubicación por 5 minutos
+            Toast.makeText(context, "🚨 SOS ENVIADO. Compartiendo ubicación por 5 minutos.", Toast.LENGTH_LONG).show()
+
+            // Iniciar publicación de ubicación en Firestore (con expiración)
             locationShareRepositorio.iniciarSos(
                 usuarioActual.uid,
                 ubicacionActual.latitude,
                 ubicacionActual.longitude,
                 300000L
             )
-            sosActivo = true
-            // Programar desactivación automática después de 5 minutos
-            delay(300000)
-            sosActivo = false
-            locationShareRepositorio.detenerSos(usuarioActual.uid)
+            // No establecer sosActivo = true aquí; lo hará el listener
+        } else {
+            Toast.makeText(context, "No se pudo obtener ubicación. Activa el GPS.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -491,8 +492,35 @@ fun HomeCiudadanoScreen(navController: NavController) {
 
                 BotonSOS(
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                    onSosActivado = { activarSos() }
+                    isActive = sosActivo,
+                    onSosActivado = { activarSos() },
+                    onLongPressComplete = { showCallDialog = true }
                 )
+                // Diálogo de llamada al 105 (aparece tras mantener presionado SOS 3 segundos)
+                if (showCallDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showCallDialog = false },
+                        icon = { Icon(Icons.Default.LocalPolice, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(36.dp)) },
+                        title = { Text("¿Llamar a emergencias?", fontWeight = FontWeight.Bold) },
+                        text = { Text("Se marcará el número 105 (Policía Nacional del Perú). ¿Confirmas la llamada?") },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    showCallDialog = false
+                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:105"))
+                                    context.startActivity(intent)
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE04F5F))
+                            ) {
+                                Text("Llamar ahora", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showCallDialog = false }) { Text("Cancelar") }
+                        }
+                    )
+                }
+
 
                 // Modal de incidente activo a 50 metros
                 if (mostrarDialogoProximidad && reporteCercano != null) {

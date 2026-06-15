@@ -319,70 +319,69 @@ fun MapActionButton(icon: ImageVector, onClick: () -> Unit = {}) {
 @Composable
 fun BotonSOS(
     modifier: Modifier = Modifier,
-    onSosActivado: suspend () -> Unit
+    isActive: Boolean,  // true cuando SOS está activo (publicando ubicación)
+    onSosActivado: suspend () -> Unit,
+    onLongPressComplete: () -> Unit = {}  // Nuevo callback para cuando se complete la presión larga
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var mostrandoDialogo by remember { mutableStateOf(false) }
+    var isPressing by remember { mutableStateOf(false) }
 
-    // Diálogo de confirmación de llamada (opcional, pero lo dejamos por si el usuario quiere)
-    if (mostrandoDialogo) {
-        AlertDialog(
-            onDismissRequest = { mostrandoDialogo = false },
-            icon = { Icon(Icons.Default.LocalPolice, null, tint = Color(0xFFE04F5F), modifier = Modifier.size(36.dp)) },
-            title = { Text("¿Llamar a emergencias?", fontWeight = FontWeight.Bold) },
-            text = { Text("Se marcará el número 105 (Policía Nacional del Perú). ¿Confirmas la llamada?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        mostrandoDialogo = false
-                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:105"))
-                        context.startActivity(intent)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE04F5F))
-                ) {
-                    Text("Llamar ahora", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { mostrandoDialogo = false }) { Text("Cancelar") }
-            }
-        )
-    }
+    val buttonColor = if (isActive) Color.Gray else Color(0xFFE04F5F)
 
     Surface(
         shape = CircleShape,
         modifier = modifier
             .size(72.dp)
-            .pointerInput(Unit) {
+            .pointerInput(isActive) {
                 detectTapGestures(
-                    onTap = {
-                        // Toque corto: muestra el diálogo de llamada (opcional, pero lo mantenemos)
-                        mostrandoDialogo = true
-                    },
                     onPress = {
-                        // Mantener presionado 3 segundos -> activar SOS + llamar automáticamente
-                        val job = scope.launch {
-                            delay(3000)
-                            // 1. Activar SOS (reporte + ubicación visible)
-                            onSosActivado()
-                            // 2. Llamar al 105 (sin diálogo adicional, acción directa)
-                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:105"))
-                            context.startActivity(intent)
+                        if (isActive) {
+                            Toast.makeText(context, "SOS activo. Podrás volver a usarlo en 5 minutos", Toast.LENGTH_SHORT).show()
+                            tryAwaitRelease()
+                        } else {
+                            isPressing = true
+                            val job = scope.launch {
+                                delay(3000)
+                                isPressing = false  // marcar delay cumplido antes de ejecutar
+                                onSosActivado()
+                                onLongPressComplete()
+                            }
+                            try { awaitRelease() } finally {
+                                if (isPressing) {
+                                    // usuario soltó antes de 3 segundos → cancelar
+                                    job.cancel()
+                                    isPressing = false
+                                }
+                                // si !isPressing, el delay ya venció → dejar que el job termine
+                            }
                         }
-                        try { awaitRelease() } finally { job.cancel() }
                     }
                 )
             },
-        color = Color(0xFFE04F5F),
+        color = buttonColor,
         shadowElevation = 8.dp
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(Icons.Default.LocalPolice, null, tint = Color.White, modifier = Modifier.size(22.dp))
-            Text("SOS", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+        Box(contentAlignment = Alignment.Center) {
+            if (isPressing) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(40.dp)
+                )
+            } else {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.LocalPolice, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                    if (isActive) {
+                        Text("ACTIVO", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    } else {
+                        Text("SOS", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                    }
+                }
+            }
         }
     }
 }
