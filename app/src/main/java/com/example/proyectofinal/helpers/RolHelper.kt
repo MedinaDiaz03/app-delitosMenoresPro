@@ -20,7 +20,6 @@ class RolHelper {
                 onComplete()
             }
             .addOnFailureListener {
-                // Si el documento no existe (primer login Google), lo creamos
                 val nuevoUsuario = mapOf(
                     "uid" to user.uid,
                     "nombre" to (user.displayName ?: "Usuario Google"),
@@ -48,7 +47,6 @@ class RolHelper {
                     onComplete()
                 }
                 .addOnFailureListener {
-                    // Similar al ciudadano, si no existe lo creamos
                     val nuevoUsuario = mapOf(
                         "uid" to user.uid,
                         "nombre" to (user.displayName ?: "Usuario Google"),

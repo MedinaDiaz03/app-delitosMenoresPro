@@ -159,7 +159,6 @@ fun MapaConReportes(
         liveRepo.escuchar { ubicacionesEnVivo = it }
     }
 
-    // Filtrar ubicaciones en vivo: solo mostrar de otros usuarios a menos de 100 metros
     val ubicacionesFiltradas = remember(userLocation, ubicacionesEnVivo, usuarioIdActual) {
         if (userLocation == null || usuarioIdActual == null) return@remember emptyList<LocationShare>()
         ubicacionesEnVivo.filter { live ->
@@ -170,10 +169,8 @@ fun MapaConReportes(
         }
     }
 
-    // IDs de SOS ya notificados (persiste mientras el composable está en el árbol)
     val sosNotificados = remember { mutableSetOf<String>() }
 
-    // Notificación única por cada nuevo SOS que entre al radio de 100 m
     LaunchedEffect(ubicacionesFiltradas) {
         ubicacionesFiltradas.forEach { live ->
             if (live.usuarioId !in sosNotificados) {
@@ -190,18 +187,24 @@ fun MapaConReportes(
         }
     }
 
+    // Filtrar reportes: siempre excluir los de más de 24h, y si soloHoy solo mostrar los de hoy
     val reportesFiltrados = remember(reportes, soloHoy) {
-        if (soloHoy) {
-            val hoy = Calendar.getInstance()
-            reportes.filter { reporte ->
-                reporte.fecha?.let { timestamp ->
-                    val fechaRepo = Calendar.getInstance().apply { time = timestamp.toDate() }
-                    fechaRepo.get(Calendar.YEAR) == hoy.get(Calendar.YEAR) &&
-                            fechaRepo.get(Calendar.DAY_OF_YEAR) == hoy.get(Calendar.DAY_OF_YEAR)
-                } ?: false
+        val ahora = System.currentTimeMillis()
+        val unDiaEnMillis = 24 * 60 * 60 * 1000L
+
+        reportes.filter { reporte ->
+            val fechaMs = reporte.fecha?.toDate()?.time ?: 0L
+            val esReciente = (ahora - fechaMs) <= unDiaEnMillis  // ← siempre filtra 24h
+
+            if (soloHoy) {
+                val hoy = Calendar.getInstance()
+                val fechaRepo = Calendar.getInstance().apply { time = reporte.fecha!!.toDate() }
+                esReciente &&
+                        fechaRepo.get(Calendar.YEAR) == hoy.get(Calendar.YEAR) &&
+                        fechaRepo.get(Calendar.DAY_OF_YEAR) == hoy.get(Calendar.DAY_OF_YEAR)
+            } else {
+                esReciente
             }
-        } else {
-            reportes
         }
     }
 
@@ -268,7 +271,6 @@ fun MapaConReportes(
         }
     }
 
-    // Dialog al hacer clic en un marcador
     reporteSeleccionado?.let { reporte ->
         val distanciaText = if (userLocation != null) {
             val metros = DistanceUtils.calcularDistanciaMetros(
@@ -367,9 +369,9 @@ fun MapActionButton(icon: ImageVector, onClick: () -> Unit = {}) {
 @Composable
 fun BotonSOS(
     modifier: Modifier = Modifier,
-    isActive: Boolean,  // true cuando SOS está activo (publicando ubicación)
+    isActive: Boolean,
     onSosActivado: suspend () -> Unit,
-    onLongPressComplete: () -> Unit = {}  // Nuevo callback para cuando se complete la presión larga
+    onLongPressComplete: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -391,17 +393,15 @@ fun BotonSOS(
                             isPressing = true
                             val job = scope.launch {
                                 delay(3000)
-                                isPressing = false  // marcar delay cumplido antes de ejecutar
+                                isPressing = false
                                 onSosActivado()
                                 onLongPressComplete()
                             }
                             try { awaitRelease() } finally {
                                 if (isPressing) {
-                                    // usuario soltó antes de 3 segundos → cancelar
                                     job.cancel()
                                     isPressing = false
                                 }
-                                // si !isPressing, el delay ya venció → dejar que el job termine
                             }
                         }
                     }

@@ -211,6 +211,7 @@ fun RegisterScreen(navController: NavController) {
                 errorMessage = passwordError
             )
 
+
             Spacer(modifier = Modifier.height(16.dp))
 
             PrimaryInputField(
@@ -222,6 +223,8 @@ fun RegisterScreen(navController: NavController) {
                 isPassword = true,
                 errorMessage = confirmPasswordError
             )
+
+
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -322,7 +325,7 @@ fun RegisterScreen(navController: NavController) {
                             nombre = nombreCompleto,
                             email = correo,
                             rol = if (esCodigoValido) "policia" else "ciudadano",
-                            verificado = esCodigoValido
+                            verificado = esCodigoValido,
                         )
 
                         scope.launch {

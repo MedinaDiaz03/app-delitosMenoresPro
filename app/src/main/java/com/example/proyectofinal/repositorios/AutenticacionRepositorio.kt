@@ -20,7 +20,7 @@ class AutenticacionRepositorio {
                     uid = user.uid,
                     nombre = user.displayName ?: "Usuario",
                     email = user.email ?: "",
-                    rol = "", // Empezamos vacío para detectar que debe elegir rol
+                    rol = "",
                     verificado = false
                 )
                 userRef.set(nuevoUsuario).await()
@@ -40,8 +40,18 @@ class AutenticacionRepositorio {
                 "rol" to nuevoRol,
                 "verificado" to verificado
             )
+            db.collection("usuarios").document(uid).update(actualizaciones).await()
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun actualizarTelefonoEmergencia(telefono: String): Result<Boolean> {
+        return try {
+            val uid = auth.currentUser?.uid ?: throw Exception("Usuario no autenticado")
             db.collection("usuarios").document(uid)
-                .update(actualizaciones)
+                .update("telefonoEmergencia", telefono)
                 .await()
             Result.success(true)
         } catch (e: Exception) {
@@ -53,14 +63,8 @@ class AutenticacionRepositorio {
         return try {
             val resultado = auth.createUserWithEmailAndPassword(usuario.email, contrasena).await()
             val uid = resultado.user?.uid ?: throw Exception("No se pudo obtener el ID del usuario")
-            
             val usuarioConId = usuario.copy(uid = uid)
-            
-            db.collection("usuarios")
-                .document(uid)
-                .set(usuarioConId)
-                .await()
-            
+            db.collection("usuarios").document(uid).set(usuarioConId).await()
             Result.success(true)
         } catch (e: Exception) {
             Result.failure(e)
@@ -82,7 +86,6 @@ class AutenticacionRepositorio {
             val userFirebase = auth.currentUser ?: return null
             val uid = userFirebase.uid
             val documento = db.collection("usuarios").document(uid).get().await()
-            
             if (documento.exists()) {
                 documento.toObject(Usuario::class.java)
             } else {

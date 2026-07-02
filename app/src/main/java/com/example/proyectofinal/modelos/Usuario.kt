@@ -6,5 +6,6 @@ data class Usuario(
     val email: String = "",
     val rol: String = "ciudadano",
     val verificado: Boolean = false,
-    val nivelConfianza: Int = 0
+    val nivelConfianza: Int = 0,
+    val telefonoEmergencia: String = ""
 )

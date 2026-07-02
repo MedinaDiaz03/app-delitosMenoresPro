@@ -61,7 +61,6 @@ import kotlinx.coroutines.Dispatchers
 
 data class CategoryItem(val name: String, val icon: ImageVector, val color: Color)
 
-// Comprime y devuelve ByteArray directamente — sin FileProvider, sin paso intermedio a disco
 suspend fun comprimirImagen(context: Context, uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
     try {
         val inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
@@ -153,10 +152,8 @@ fun ReportScreen(navController: NavController) {
         }
     }
 
-    // ESTADO REAL DEL GPS SENSOR DEL EQUIPO
     var gpsActivo by remember { mutableStateOf(false) }
 
-    // Monitoreo constante en segundo plano para saber si el GPS físico está encendido
     LaunchedEffect(Unit) {
         if (!locationPermissionState.status.isGranted) {
             locationPermissionState.launchPermissionRequest()
@@ -169,7 +166,6 @@ fun ReportScreen(navController: NavController) {
         }
     }
 
-    // Pre-caché de ubicación y datos de usuario en cuanto el permiso y GPS están listos
     LaunchedEffect(locationPermissionState.status.isGranted, gpsActivo) {
         if (locationPermissionState.status.isGranted && gpsActivo) {
             ubicacionCacheada = locationRepositorio.obtenerUbicacionActual()
@@ -182,14 +178,12 @@ fun ReportScreen(navController: NavController) {
 
     val ubicacionCompletamenteValida = locationPermissionState.status.isGranted && gpsActivo
 
-    // Mostrar modal de activación al entrar si no hay ubicación válida
     LaunchedEffect(gpsActivo, locationPermissionState.status.isGranted) {
         if (!ubicacionCompletamenteValida) {
             mostrarModalUbicacion = true
         }
     }
 
-    // Modal de activación de ubicación
     if (mostrarModalUbicacion && !ubicacionCompletamenteValida) {
         AlertDialog(
             onDismissRequest = {
@@ -354,7 +348,6 @@ fun ReportScreen(navController: NavController) {
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color(0xFF1E293B))
             )
 
-            // UNICA ALERTA CRITICA VISUAL SI ALGO FALLA CON LA UBICACIÓN
             if (!ubicacionCompletamenteValida) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -380,7 +373,6 @@ fun ReportScreen(navController: NavController) {
                             )
                         }
 
-                        // Mensaje dinámico dependiendo de qué es exactamente lo que falta activar
                         val mensajeAlerta = if (!locationPermissionState.status.isGranted) {
                             "No puedes realizar reportes sin aceptar los permisos de ubicación de la aplicación."
                         } else {
@@ -389,7 +381,6 @@ fun ReportScreen(navController: NavController) {
 
                         Text(text = mensajeAlerta, color = Color(0xFF856404), fontSize = 13.sp)
 
-                        // Si falta el permiso, mostramos explícitamente el botón para concederlo
                         if (!locationPermissionState.status.isGranted) {
                             Button(
                                 onClick = { locationPermissionState.launchPermissionRequest() },
@@ -405,13 +396,11 @@ fun ReportScreen(navController: NavController) {
                 }
             }
 
-            // BOTÓN DE ENVIAR REPORTES
             Button(
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
                 shape = RoundedCornerShape(12.dp),
                 onClick = {
                     if (enviando) return@Button
-                    // Validación: categoría siempre requerida + (descripción o imagen)
                     when {
                         categoriaSeleccionada == null ->
                             categoriaError = "Selecciona una categoría del incidente"
@@ -427,7 +416,6 @@ fun ReportScreen(navController: NavController) {
                                     val ubicacion = ubicacionCacheada
                                         ?: locationRepositorio.obtenerUbicacionActual()
 
-                                    // Geocodificación + compresión/upload en PARALELO
                                     val direccionDeferred = async {
                                         runCatching {
                                             if (ubicacion != null)
@@ -469,7 +457,8 @@ fun ReportScreen(navController: NavController) {
                                         FCMHelper.enviarNotificacionGlobal(
                                             context,
                                             "Nuevo Reporte: ${nuevoReporte.categoria.uppercase()}",
-                                            "Se ha reportado un incidente: ${nuevoReporte.descripcion.take(50)}"
+                                            "Se ha reportado un incidente: ${nuevoReporte.descripcion.take(50)}",
+                                            autorId = nuevoReporte.usuarioId
                                         )
                                         Toast.makeText(context, "Reporte enviado con éxito", Toast.LENGTH_SHORT).show()
                                         navController.popBackStack()

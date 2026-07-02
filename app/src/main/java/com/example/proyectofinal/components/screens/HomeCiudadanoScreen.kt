@@ -36,7 +36,6 @@ import com.example.proyectofinal.viewmodels.MapCenteringViewModel
 import coil.compose.AsyncImage
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -75,9 +74,13 @@ fun HomeCiudadanoScreen(navController: NavController) {
         prefs.getStringSet("ids", emptySet())?.toMutableSet() ?: mutableSetOf()
     }
 
+    val prefsNotif = context.getSharedPreferences("notified_reports", Context.MODE_PRIVATE)
+    val idsNotificados = remember {
+        prefsNotif.getStringSet("ids", emptySet())?.toMutableSet() ?: mutableSetOf()
+    }
+
     var mostrarDialogoProximidad by remember { mutableStateOf(false) }
     var reporteCercano by remember { mutableStateOf<Reporte?>(null) }
-    val idsNotificados = remember { mutableSetOf<String>() }
 
     val locationPermissionsState = rememberMultiplePermissionsState(
         permissions = listOf(
@@ -90,7 +93,6 @@ fun HomeCiudadanoScreen(navController: NavController) {
         position = CameraPosition.fromLatLngZoom(MapConstants.DEFAULT_LOCATION, 13f)
     }
 
-    // Obtener usuario actual y uid
     LaunchedEffect(Unit) {
         usuario = authRepositorio.obtenerDatosUsuarioActual()
         uidActual = usuario?.uid
@@ -104,21 +106,18 @@ fun HomeCiudadanoScreen(navController: NavController) {
         }
     }
 
-    // Escuchar reportes
     LaunchedEffect(Unit) {
         reporteRepositorio.escucharReportes { lista ->
             reportes = lista.filter { it.estado in listOf("en_revision", "activo", "verificado") }
         }
     }
 
-    // Solicitar permisos de ubicación
     LaunchedEffect(Unit) {
         if (!locationPermissionsState.allPermissionsGranted) {
             locationPermissionsState.launchMultiplePermissionRequest()
         }
     }
 
-    // Bucle de notificaciones por proximidad (cada 30 segundos) - sin cambios
     LaunchedEffect(Unit) {
         while (true) {
             if (locationPermissionsState.allPermissionsGranted) {
@@ -127,7 +126,6 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     val ahora = System.currentTimeMillis()
                     val unDiaEnMillis = 24 * 60 * 60 * 1000L
 
-                    // Modal si hay incidente a menos de 50 metros
                     val cercano = reportes.find { repo ->
                         val fechaMs = repo.fecha.toDate().time
                         repo.id !in idsIgnorados &&
@@ -145,10 +143,10 @@ fun HomeCiudadanoScreen(navController: NavController) {
                         prefs.edit().putStringSet("ids", idsIgnorados.toSet()).apply()
                     }
 
-                    // Notificaciones para reportes dentro de 2km
                     reportes.filter { repo ->
                         val fechaMs = repo.fecha.toDate().time
                         repo.id !in idsNotificados &&
+                                repo.usuarioId != uidActual &&
                                 (ahora - fechaMs) <= unDiaEnMillis &&
                                 DistanceUtils.calcularDistanciaMetros(
                                     ubicacionActual.latitude, ubicacionActual.longitude,
@@ -156,6 +154,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
                                 ) < 2000.0
                     }.forEach { repo ->
                         idsNotificados.add(repo.id)
+                        prefsNotif.edit().putStringSet("ids", idsNotificados.toSet()).apply()
                         NotificationHelper.mostrarNotificacion(
                             context,
                             "Incidente detectado: ${repo.categoria.uppercase()}",
@@ -169,7 +168,6 @@ fun HomeCiudadanoScreen(navController: NavController) {
         }
     }
 
-    // Bucle de publicación de ubicación SOLO si SOS está activo (cada 3 segundos)
     LaunchedEffect(sosActivo) {
         if (sosActivo && uidActual != null) {
             while (sosActivo) {
@@ -186,14 +184,12 @@ fun HomeCiudadanoScreen(navController: NavController) {
         }
     }
 
-    // Centrar mapa cuando se hace clic en una notificación SOS
     LaunchedEffect(Unit) {
         mapCenteringViewModel.centerEvent.collect { latLng ->
             camaraState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 17f))
         }
     }
 
-    // Centrar cámara en ubicación actual al iniciar
     LaunchedEffect(locationPermissionsState.allPermissionsGranted) {
         if (locationPermissionsState.allPermissionsGranted) {
             val ubicacion = locationRepositorio.obtenerUbicacionActual()
@@ -227,10 +223,7 @@ fun HomeCiudadanoScreen(navController: NavController) {
         val usuarioActual = authRepositorio.obtenerDatosUsuarioActual()
         val ubicacionActual = locationRepositorio.obtenerUbicacionActual()
         if (usuarioActual != null && ubicacionActual != null) {
-            // Actualizar ubicación en la UI
             userLocation = LatLng(ubicacionActual.latitude, ubicacionActual.longitude)
-
-            // Crear reporte SOS
             val nuevoSOS = Reporte(
                 usuarioId = usuarioActual.uid,
                 usuarioNombre = usuarioActual.nombre,
@@ -242,15 +235,19 @@ fun HomeCiudadanoScreen(navController: NavController) {
             )
             reporteRepositorio.enviarReporte(nuevoSOS)
             Toast.makeText(context, "🚨 SOS ENVIADO. Compartiendo ubicación por 5 minutos.", Toast.LENGTH_LONG).show()
-
-            // Iniciar publicación de ubicación en Firestore (con expiración)
             locationShareRepositorio.iniciarSos(
                 usuarioActual.uid,
                 ubicacionActual.latitude,
                 ubicacionActual.longitude,
                 300000L
             )
-            // No establecer sosActivo = true aquí; lo hará el listener
+
+            // Llamar al número de emergencia personal si tiene uno guardado
+            val telefono = usuarioActual.telefonoEmergencia
+            if (telefono.isNotBlank()) {
+                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$telefono"))
+                context.startActivity(intent)
+            }
         } else {
             Toast.makeText(context, "No se pudo obtener ubicación. Activa el GPS.", Toast.LENGTH_SHORT).show()
         }
@@ -507,9 +504,15 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 120.dp, end = 16.dp),
                     isActive = sosActivo,
                     onSosActivado = { activarSos() },
-                    onLongPressComplete = { showCallDialog = true }
+                    onLongPressComplete = {
+                        // Solo mostrar diálogo del 105 si no tiene número propio guardado
+                        val telefono = usuario?.telefonoEmergencia ?: ""
+                        if (telefono.isBlank()) {
+                            showCallDialog = true
+                        }
+                    }
                 )
-                // Diálogo de llamada al 105 (aparece tras mantener presionado SOS 3 segundos)
+
                 if (showCallDialog) {
                     AlertDialog(
                         onDismissRequest = { showCallDialog = false },
@@ -534,8 +537,6 @@ fun HomeCiudadanoScreen(navController: NavController) {
                     )
                 }
 
-
-                // Modal de incidente activo a 50 metros
                 if (mostrarDialogoProximidad && reporteCercano != null) {
                     AlertDialog(
                         onDismissRequest = { mostrarDialogoProximidad = false },

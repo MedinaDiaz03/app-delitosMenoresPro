@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -28,6 +30,7 @@ import com.example.proyectofinal.repositorios.AutenticacionRepositorio
 import com.example.proyectofinal.repositorios.ReporteRepositorio
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,13 +38,17 @@ fun ProfileScreen(navController: NavController) {
     val context = LocalContext.current
     val authRepo = remember { AutenticacionRepositorio() }
     val reportRepo = remember { ReporteRepositorio() }
+    val scope = rememberCoroutineScope()
     var usuario by remember { mutableStateOf<Usuario?>(null) }
     var totalReportes by remember { mutableIntStateOf(0) }
+    var telefonoInput by remember { mutableStateOf("") }
+    var guardandoTelefono by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         usuario = authRepo.obtenerDatosUsuarioActual()
         if (usuario != null) {
             totalReportes = reportRepo.obtenerConteoReportesUsuario(usuario!!.uid)
+            telefonoInput = usuario!!.telefonoEmergencia
         }
     }
 
@@ -118,6 +125,89 @@ fun ProfileScreen(navController: NavController) {
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
+            // Sección número de emergencia
+            if (usuario?.rol != "policia") {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Número de emergencia",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        color = Color(0xFF1E293B)
+                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                "Al activar el botón SOS, se llamará automáticamente a este número.",
+                                fontSize = 12.sp,
+                                color = Color(0xFF64748B)
+                            )
+                            OutlinedTextField(
+                                value = telefonoInput,
+                                onValueChange = { telefonoInput = it },
+                                label = { Text("Número de contacto") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Phone, null, tint = Color(0xFF1E3A8A))
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF1E3A8A),
+                                    unfocusedBorderColor = Color(0xFFCBD5E1),
+                                    focusedLabelColor = Color(0xFF1E3A8A)
+                                ),
+                                singleLine = true
+                            )
+                            Button(
+                                onClick = {
+                                    if (telefonoInput.isBlank()) {
+                                        Toast.makeText(context, "Ingresa un número válido", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    guardandoTelefono = true
+                                    scope.launch {
+                                        val resultado = authRepo.actualizarTelefonoEmergencia(telefonoInput.trim())
+                                        if (resultado.isSuccess) {
+                                            Toast.makeText(context, "Número guardado ✅", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Error al guardar", Toast.LENGTH_SHORT).show()
+                                        }
+                                        guardandoTelefono = false
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
+                                enabled = !guardandoTelefono
+                            ) {
+                                if (guardandoTelefono) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text("Guardar número", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
             Column(
                 modifier = Modifier.padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -161,14 +251,10 @@ fun PerfilCabecera(usuario: Usuario?) {
             .height(220.dp)
             .background(
                 Brush.linearGradient(
-                    listOf(
-                        Color(0xFF1E3A8A),
-                        Color(0xFF2563EB)
-                    )
+                    listOf(Color(0xFF1E3A8A), Color(0xFF2563EB))
                 )
             )
     ) {
-        // Decoración sutil
         Box(
             modifier = Modifier
                 .size(200.dp)

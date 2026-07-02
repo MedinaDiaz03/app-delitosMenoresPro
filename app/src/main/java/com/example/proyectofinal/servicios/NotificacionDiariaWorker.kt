@@ -25,14 +25,15 @@ class NotificacionDiariaWorker(
 
         val usuario = authRepo.obtenerDatosUsuarioActual()
 
-        // Solo ciudadanos reciben esta notificación
         if (usuario?.rol != "ciudadano") {
             return Result.success()
         }
 
-        // Obtener reportes registrados
         val reportes = reporteRepo.obtenerReportes()
-        val cantidad = reportes.size
+
+        // Excluir reportes que el propio usuario creó
+        val reportesDeOtros = reportes.filter { it.usuarioId != usuario.uid }
+        val cantidad = reportesDeOtros.size
 
         if (cantidad > 0) {
             mostrarNotificacion(applicationContext, cantidad)
@@ -64,7 +65,6 @@ class NotificacionDiariaWorker(
             .setAutoCancel(true)
             .build()
 
-        // Verificar permiso antes de notificar
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
                 NotificationManagerCompat.from(context).notify(1, notification)
